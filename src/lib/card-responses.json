@@ -1,0 +1,57 @@
+{
+  "services": [
+    {
+      "id": "general-it",
+      "title": "General IT Consulting",
+      "keywords": ["IT", "Consulting"],
+      "description": "We help with utilizing unique hardware and software solutions to drive efficiency and productivity."
+    },
+    {
+      "id": "agentic-ai",
+      "title": "Agentic AI Solutions",
+      "keywords": ["Agentic", "AI"],
+      "description": "Our premier custom solution that execute tasks for you so that you don't have to."
+    },
+    {
+      "id": "automation",
+      "title": "Automation Solutions",
+      "keywords": ["Automation"],
+      "description": "Simple and cost effective way to execute repetitious tasks."
+    },
+    {
+      "id": "data-transformation",
+      "title": "Data Transformation Services",
+      "keywords": ["Data", "Transformation"],
+      "description": "The most productive way to bring data and analytics that matters."
+    }
+  ],
+
+  "company": [
+    {
+      "step": 1,
+      "title": "Diagnose",
+      "description": "Our initial consultation is to listen, ask questions, and document every hiccup in your current processes, making sure that there is a problem we can handle."
+    },
+    {
+      "step": 2,
+      "title": "Design",
+      "description": "This stage, we collaborate on the scope of how the work should be handling things, the deliverables of our services, and pricing to fit within a particular budget."
+    },
+    {
+      "step": 3,
+      "title": "Deliver",
+      "description": "That means, we execute on developing, iterating, and deploying the solution and your team so that it works for you and your company."
+    },
+    {
+      "step": 4,
+      "title": "Direct",
+      "description": "Direct is the most critical stage as this pertains to embedding lasting change by training, understanding best practices, and to provided proactive support."
+    }
+  ],
+
+  "buttons": {
+    "schedule": "Schedule an appointment",
+    "learn_more_services": "Learn more about our services",
+    "learn_more_company": "Learn more about the company"
+  }
+}

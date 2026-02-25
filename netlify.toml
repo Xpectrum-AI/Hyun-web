@@ -1,0 +1,44 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[dev]
+  command = "npm run dev -- --port 5173"
+  port = 8888
+  publish = "dist"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/voice/*"
+  to = "/.netlify/functions/voice-integration/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/chat"
+  to = "/.netlify/functions/chatbot-proxy"
+  status = 200
+
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/health-check"
+  status = 200
+
+[[redirects]]
+  from = "/debug-voice"
+  to = "/.netlify/functions/debug-voice"
+  status = 200
+
+[[redirects]]
+  from = "/test-voice"
+  to = "/.netlify/functions/test-voice"
+  status = 200
