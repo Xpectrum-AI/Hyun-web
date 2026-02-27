@@ -11,8 +11,8 @@ import DOMPurify from 'dompurify';
 import haLogo from "@/assets/HA.png";
 
 // ─── Dify API Config ────────────────────────────────────────────────────────
-const DIFY_API_URL = "https://xpectrum-main-app-v2-dev-elx23.ondigitalocean.app/api/v1/chat-messages";
-const DIFY_API_KEY = "app-UwNBR5Wphc1eNuO403KcYOBS";
+const DIFY_API_URL = "https://xpectrum-main-app-prod-cocfr.ondigitalocean.app/api/v1/chat-messages";
+const DIFY_API_KEY = "app-inV7BpUmj47RIiD0nnFvQNyH";
 
 // ─── Card Widget Types ──────────────────────────────────────────────────────
 type CardWidget = {
@@ -26,6 +26,7 @@ type CardAction = { type: 'button' | 'link'; label: string; message?: string; ur
 type ServiceItem = { id: string; title: string; description: string; icon?: string };
 type ProcessItem = { step: number | string; title: string; description: string; icon?: string };
 type TimeSlot = { start: string; end_time?: string; end?: string };
+type AboutCompanyItem = { image?: string; title?: string; description?: string; text?: string };
 
 type AgentThought = {
   id: string;
@@ -49,6 +50,8 @@ const stripJson = (str: string) => {
     .replace(/```json[\s\S]*?(```|$)/g, '')
     .replace(/\{[\s\S]*"slots"[\s\S]*\}/g, '')
     .replace(/\{[\s\S]*"services"[\s\S]*\}/g, '')
+    .replace(/\{[\s\S]*"about_company"[\s\S]*\}/g, '')
+    .replace(/\{[\s\S]*"company_info"[\s\S]*\}/g, '')
     .trim();
 };
 
@@ -77,6 +80,34 @@ function isServiceArray(arr: any[]): arr is ServiceItem[] {
 function isTimeSlotArray(arr: any[]): arr is TimeSlot[] {
   return Array.isArray(arr) && arr.length > 0 &&
     arr.every(i => i && typeof i === 'object' && typeof i.start === 'string' && i.start.length > 0);
+}
+
+function isAboutCompanyObject(data: any): data is AboutCompanyItem {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const hasImage = typeof data.image === 'string' && data.image.length > 0;
+  const hasText = typeof data.description === 'string' || typeof data.text === 'string';
+  return hasImage || (hasText && (data.title || data.company_name));
+}
+
+function findAboutCompanyInData(data: any): AboutCompanyItem | null {
+  if (!data || typeof data !== 'object') return null;
+
+  // Direct match: { image, title, description }
+  if (isAboutCompanyObject(data)) return data;
+
+  // Nested under common keys
+  for (const key of ['about', 'company', 'about_company', 'company_info']) {
+    if (data[key] && isAboutCompanyObject(data[key])) return data[key];
+  }
+
+  // Unwrap .result
+  if ('result' in data) {
+    const r = deepUnwrap(data.result);
+    const found = findAboutCompanyInData(r);
+    if (found) return found;
+  }
+
+  return null;
 }
 
 function isProcessArray(arr: any[]): arr is ProcessItem[] {
@@ -171,6 +202,11 @@ function extractCardFromObservation(observation: string): CardWidget | null {
   if (!parsed.ok) return null;
   const data = deepUnwrap(parsed.data);
 
+  const aboutCompany = findAboutCompanyInData(data);
+  if (aboutCompany) {
+    return { template: 'card_widget', type: 'about_company', payload: aboutCompany };
+  }
+
   const slotResult = findInData<TimeSlot>(data, isTimeSlotArray, ['available_slots', 'slots']);
   if (slotResult && slotResult.items.length > 0) {
     const dateVal = slotResult.extra?.date || (data?.date);
@@ -218,28 +254,80 @@ function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
   return null;
 }
 
+// ─── About Company Text Detection (non-JSON plain-text responses) ────────
+
+function looksLikeAboutCompany(text: string): boolean {
+  const lower = text.toLowerCase();
+  const keywords = ['company', 'founded', 'ceo', 'founder', 'headquarters', 'about us',
+    'our mission', 'established', 'associates', 'consulting', 'framework', 'advisory',
+    'chief executive', 'managing director', 'our team', 'our approach'];
+  let matches = 0;
+  for (const kw of keywords) {
+    if (lower.includes(kw)) matches++;
+  }
+  return matches >= 2;
+}
+
+function extractImageUrlFromText(text: string): string | undefined {
+  // Markdown image: ![alt](url)
+  const mdMatch = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/i.exec(text);
+  if (mdMatch) return mdMatch[1];
+  // Bare image URL (jpg/jpeg/png/gif/webp/svg)
+  const bareMatch = /(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s<>"]*)?)/i.exec(text);
+  if (bareMatch) return bareMatch[1];
+  return undefined;
+}
+
+function cleanTextForCard(text: string): string {
+  return text
+    .replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/g, '')                              // remove markdown images
+    .replace(/(https?:\/\/[^\s<>"]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s<>"]*)?)/gi, '') // remove bare image URLs
+    .replace(/\n{3,}/g, '\n\n')                                                    // collapse excess newlines
+    .trim();
+}
+
+function extractAboutCompanyFromText(text: string): CardWidget | null {
+  if (!text || typeof text !== 'string') return null;
+  if (!looksLikeAboutCompany(text)) return null;
+
+  const imageUrl = extractImageUrlFromText(text);
+  const cleanText = cleanTextForCard(text);
+
+  return {
+    template: 'card_widget',
+    type: 'about_company',
+    payload: {
+      image: imageUrl,
+      description: cleanText,
+    },
+  };
+}
+
 function extractCardFromContent(content: string): CardWidget | null {
   if (!content || typeof content !== 'string') return null;
-  if (!content.includes('{')) return null;
 
-  const jsonBlocks = content.match(/```json\s*([\s\S]*?)```/g);
-  if (jsonBlocks) {
-    for (const block of jsonBlocks) {
-      const json = block.replace(/```json\s*/, '').replace(/```$/, '').trim();
+  // Try JSON-based extraction first
+  if (content.includes('{')) {
+    const jsonBlocks = content.match(/```json\s*([\s\S]*?)```/g);
+    if (jsonBlocks) {
+      for (const block of jsonBlocks) {
+        const json = block.replace(/```json\s*/, '').replace(/```$/, '').trim();
+        const cw = extractCardFromObservation(json);
+        if (cw) return cw;
+      }
+    }
+
+    const braceStart = content.indexOf('{');
+    const braceEnd = content.lastIndexOf('}');
+    if (braceStart >= 0 && braceEnd > braceStart) {
+      const json = content.slice(braceStart, braceEnd + 1);
       const cw = extractCardFromObservation(json);
       if (cw) return cw;
     }
   }
 
-  const braceStart = content.indexOf('{');
-  const braceEnd = content.lastIndexOf('}');
-  if (braceStart >= 0 && braceEnd > braceStart) {
-    const json = content.slice(braceStart, braceEnd + 1);
-    const cw = extractCardFromObservation(json);
-    if (cw) return cw;
-  }
-
-  return null;
+  // Fallback: detect about_company from plain text (image + company keywords)
+  return extractAboutCompanyFromText(content);
 }
 
 // ─── Animated Logo ──────────────────────────────────────────────────────────
@@ -327,7 +415,7 @@ const FlipCard = ({ icon, title, description, index, onLearnMore }: {
         onClick={() => setFlipped(f => !f)}
       >
         <div
-          className="absolute inset-0 flex flex-col items-start justify-start rounded-2xl"
+          className="absolute inset-0 flex flex-col items-start justify-start rounded-2xl border border-white"
           style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', padding: '36px' }}
         >
           <div className="flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm" style={{ width: '64px', height: '64px', marginBottom: '32px' }}>
@@ -339,7 +427,7 @@ const FlipCard = ({ icon, title, description, index, onLearnMore }: {
         </div>
 
         <div
-          className="absolute inset-0 flex flex-col justify-between rounded-2xl bg-white/50 backdrop-blur-md"
+          className="absolute inset-0 flex flex-col justify-between rounded-2xl bg-white/50 backdrop-blur-md border border-white"
           style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', padding: '36px' }}
         >
           <p className="text-[#3a3a4a]" style={{ fontSize: '0.95rem', lineHeight: 1.75 }}>
@@ -430,6 +518,62 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
   );
 };
 
+const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSend: (msg: string) => void }) => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 100); return () => clearTimeout(t); }, []);
+
+  const text = payload.description || payload.text || '';
+  const renderedHTML = text ? DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true, async: false }) as string) : '';
+
+  return (
+    <div
+      style={{
+        fontFamily: CARD_FONT,
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(12px)',
+        transition: 'opacity 0.6s ease, transform 0.6s ease',
+      }}
+    >
+      <div className="overflow-hidden rounded-2xl" style={{ background: 'transparent' }}>
+        {payload.image && (
+          <div className="w-full overflow-hidden rounded-2xl" style={{ maxHeight: '360px' }}>
+            <img
+              src={payload.image}
+              alt={payload.title || 'About the company'}
+              className="w-full h-full object-cover"
+              style={{ display: 'block' }}
+            />
+          </div>
+        )}
+        <div style={{ padding: '24px 4px' }}>
+          {payload.title && (
+            <h3
+              className="font-semibold text-[#1a1a2e]"
+              style={{ fontSize: '1.3rem', lineHeight: 1.4, marginBottom: '12px', letterSpacing: '-0.01em' }}
+            >
+              {payload.title}
+            </h3>
+          )}
+          {renderedHTML && (
+            <div
+              className="text-[#3a3a4a] prose prose-sm max-w-none"
+              style={{ fontSize: '0.95rem', lineHeight: 1.75 }}
+              dangerouslySetInnerHTML={{ __html: renderedHTML }}
+            />
+          )}
+          <button
+            onClick={() => onSend('What services do you offer?')}
+            className="inline-flex items-center gap-1.5 font-medium text-[#af71f1] border border-[#af71f1]/40 rounded-full hover:bg-[#af71f1] hover:text-white transition-colors duration-200"
+            style={{ marginTop: '20px', padding: '10px 26px', fontSize: '0.9rem' }}
+          >
+            Explore Services
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const RenderCardWidget = ({ widget, onSend }: { widget: CardWidget; onSend: (msg: string) => void }) => {
   const { type, payload, labels } = widget;
   switch (type) {
@@ -455,6 +599,8 @@ const RenderCardWidget = ({ widget, onSend }: { widget: CardWidget; onSend: (msg
     }
     case 'time_slot_grid':
       return <TimeSlotCardView payload={payload as { slots: TimeSlot[]; date?: string }} onSend={onSend} />;
+    case 'about_company':
+      return <AboutCompanyCard payload={payload as AboutCompanyItem} onSend={onSend} />;
     default:
       return null;
   }

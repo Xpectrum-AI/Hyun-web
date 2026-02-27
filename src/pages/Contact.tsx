@@ -77,7 +77,13 @@ const Contact = () => {
                     {info.label}
                   </div>
                   <div className="opacity-85 font-semibold text-black text-base sm:text-lg md:text-xl tracking-[0] leading-6 break-all sm:break-words">
-                    {info.value}
+                    {info.id === 1 ? (
+                      <a href={`tel:${info.value.replace(/[^+\d]/g, '')}`} className="hover:underline">{info.value}</a>
+                    ) : info.id === 2 ? (
+                      <a href={`mailto:${info.value}`} className="hover:underline">{info.value}</a>
+                    ) : (
+                      info.value
+                    )}
                   </div>
                 </div>
               ))}
