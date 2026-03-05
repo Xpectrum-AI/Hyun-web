@@ -26,7 +26,12 @@ type CardAction = { type: 'button' | 'link'; label: string; message?: string; ur
 type ServiceItem = { id: string; title: string; description: string; icon?: string };
 type ProcessItem = { step: number | string; title: string; description: string; icon?: string };
 type TimeSlot = { start: string; end_time?: string; end?: string };
-type AboutCompanyItem = { image?: string; title?: string; description?: string; text?: string };
+type AboutCompanyItem = {
+  image?: string; title?: string; description?: string; text?: string;
+  name?: string; role?: string; company?: string; tagline?: string;
+  bio?: string[]; highlights?: Record<string, any>;
+  sectionTitle?: string; website?: string;
+};
 
 type AgentThought = {
   id: string;
@@ -52,6 +57,10 @@ const stripJson = (str: string) => {
     .replace(/\{[\s\S]*"services"[\s\S]*\}/g, '')
     .replace(/\{[\s\S]*"about_company"[\s\S]*\}/g, '')
     .replace(/\{[\s\S]*"company_info"[\s\S]*\}/g, '')
+    // Strip complete JSON arrays with company profile data
+    .replace(/\[\s*\{[\s\S]*?"(?:\$oid|image_url|bio)"[\s\S]*?\}\s*\]/g, '')
+    // Strip partial JSON arrays still streaming (company profile data)
+    .replace(/\[\s*\{[\s\S]*?"(?:\$oid|image_url|bio|field)"[\s\S]*$/g, '')
     .trim();
 };
 
@@ -108,6 +117,45 @@ function findAboutCompanyInData(data: any): AboutCompanyItem | null {
   }
 
   return null;
+}
+
+// ─── Company Profile Array Detection (MongoDB-style responses) ───────────
+
+function isCompanyProfileEntry(item: any): boolean {
+  if (!item || typeof item !== 'object') return false;
+  // Score-based detection – any 2 signals means it's company profile data
+  let signals = 0;
+  if (item.field === 'about') signals++;
+  if (item.bio) signals++;
+  if (item.image_url) signals++;
+  if (item.company) signals++;
+  if (item.about && typeof item.about === 'object') signals++;
+  if (item.highlights && typeof item.highlights === 'object') signals++;
+  if (item.name && item.title) signals++;
+  if (item.section_title) signals++;
+  if (item.website) signals++;
+  return signals >= 2;
+}
+
+function transformCompanyProfileToAbout(data: any): AboutCompanyItem | null {
+  // Handle arrays – find the first matching entry
+  const items = Array.isArray(data) ? data : [data];
+  const item = items.find(isCompanyProfileEntry);
+  if (!item) return null;
+
+  return {
+    image: item.image_url || item.image,
+    title: item.about?.heading || 'About Us',
+    name: item.name,
+    role: item.title,
+    company: item.company,
+    tagline: item.about?.tagline,
+    description: item.about?.description,
+    bio: Array.isArray(item.bio) ? item.bio : undefined,
+    highlights: item.highlights,
+    sectionTitle: item.section_title,
+    website: item.website,
+  };
 }
 
 function isProcessArray(arr: any[]): arr is ProcessItem[] {
@@ -198,6 +246,10 @@ function extractCardFromObservation(observation: string): CardWidget | null {
     }
   }
 
+  // Try company profile extraction first (handles arrays, objects, surrounding text)
+  const profileCard = tryParseCompanyProfile(observation);
+  if (profileCard) return profileCard;
+
   const parsed = safeParse(observation);
   if (!parsed.ok) return null;
   const data = deepUnwrap(parsed.data);
@@ -260,12 +312,12 @@ function looksLikeAboutCompany(text: string): boolean {
   const lower = text.toLowerCase();
   const keywords = ['company', 'founded', 'ceo', 'founder', 'headquarters', 'about us',
     'our mission', 'established', 'associates', 'consulting', 'framework', 'advisory',
-    'chief executive', 'managing director', 'our team', 'our approach'];
+    'chief executive', 'managing director', 'our team', 'our approach', 'president', 'specialize'];
   let matches = 0;
   for (const kw of keywords) {
     if (lower.includes(kw)) matches++;
   }
-  return matches >= 2;
+  return matches >= 3;
 }
 
 function extractImageUrlFromText(text: string): string | undefined {
@@ -286,27 +338,173 @@ function cleanTextForCard(text: string): string {
     .trim();
 }
 
+function extractStructuredAboutFromText(text: string): AboutCompanyItem {
+  const payload: AboutCompanyItem = { title: 'About Us' };
+
+  // ── Image URL ──
+  payload.image = extractImageUrlFromText(text);
+
+  // ── Company name ── e.g. "called "Hyun & Associates""
+  const companyPatterns = [
+    /(?:called|named)\s+["\u201c]([^"\u201d]+)["\u201d]/i,
+    /(?:called|named)\s+"([^"]+)"/i,
+    /(?:company|firm)\s+(?:is\s+)?(?:called\s+)?["\u201c]([^"\u201d]+)["\u201d]/i,
+    /([A-Z][A-Za-z]+(?:\s+&\s+|\s+and\s+)[A-Za-z]+(?:\s+(?:LLC|Inc|Associates|Consulting|Group|Corp))?)/,
+  ];
+  for (const p of companyPatterns) {
+    const m = text.match(p);
+    if (m) { payload.company = (m[1] || m[2] || m[3] || '').trim().replace(/["\u201c\u201d]/g, ''); break; }
+  }
+
+  // ── Person name + role ── e.g. "its CEO and President is Hyun Suh"
+  const nameRolePatterns = [
+    // "CEO and President is Hyun Suh"
+    /(?:its|the)\s+((?:CEO|President|Founder|CTO|COO|Managing Director)(?:\s+(?:and|&)\s+(?:CEO|President|Founder|CTO|COO|Managing Director))*)\s+is\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+    // "Hyun Suh is the CEO"
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:is|serves as|as)\s+(?:the\s+)?((?:CEO|President|Founder|CTO|COO)(?:\s+(?:and|&)\s+(?:CEO|President|Founder|CTO|COO))*)/i,
+    // "Hyun Suh brings ... to his role as founder and CEO"
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+brings\s+.+?(?:role\s+as|position\s+as|position\s+of)\s+(founder(?:\s+(?:and|&)\s+(?:CEO|President))?|CEO(?:\s+(?:and|&)\s+(?:President|Founder))?)/i,
+    // "founded by Hyun Suh"
+    /(?:founded|led|started|created)\s+by\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+  ];
+  for (const p of nameRolePatterns) {
+    const m = text.match(p);
+    if (m) {
+      if (/^(?:CEO|President|Founder|CTO|COO|Managing)/i.test(m[1])) {
+        payload.role = m[1].trim();
+        payload.name = m[2]?.trim();
+      } else {
+        payload.name = m[1].trim();
+        payload.role = m[2]?.trim();
+      }
+      break;
+    }
+  }
+
+  // ── Tagline ── e.g. "specialize in changing the way people work..."
+  const taglineMatch = text.match(/(?:[Tt]hey\s+)?[Ss]peciali[zs]e\s+in\s+(.+?)(?:\.\s|\.?\s*Instead|\.?\s*They\s|\.?\s*By\s)/);
+  if (taglineMatch) payload.tagline = taglineMatch[1]?.trim().replace(/\.$/, '');
+
+  // ── Highlights ──
+  const highlights: Record<string, any> = {};
+
+  const expMatch = text.match(/((?:over\s+)?(?:\w+)\s+years?\s+of\s+(?:\w+\s+)?expertise)/i);
+  if (expMatch) highlights.experience = expMatch[1].trim();
+
+  const fwMatch = text.match(/(\d+D\s+framework[^.]*?)(?:\.\s|$)/im) || text.match(/(framework\s*[-\u2014]\s*(?:Diagnose|Design|Deliver|Direct)[^.]*)/i);
+  if (fwMatch) highlights.framework = fwMatch[1].trim();
+
+  const missionMatch = text.match(/(?:[Hh]is|[Hh]er|[Tt]heir)\s+mission\s+is\s+to\s+([^.]+)/);
+  if (missionMatch) highlights.mission = missionMatch[1].trim();
+
+  const indMatch = text.match(/spanning\s+(.+?)(?:\s*[-\u2014]\s*to|\s*\.\s)/i);
+  if (indMatch) {
+    highlights.industries = indMatch[1].trim()
+      .split(/,\s*(?:and\s+)?|\s+and\s+/)
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+  }
+
+  if (Object.keys(highlights).length > 0) payload.highlights = highlights;
+
+  // ── Description & Bio ──
+  const cleanedText = cleanTextForCard(text);
+  const paragraphs = cleanedText.split(/\n\n+/).map(p => p.trim()).filter(p => p.length > 20);
+
+  if (paragraphs.length > 1) {
+    // First paragraph → short description, rest → bio
+    payload.description = paragraphs[0];
+    payload.bio = paragraphs.slice(1);
+  } else {
+    payload.description = cleanedText;
+  }
+
+  return payload;
+}
+
 function extractAboutCompanyFromText(text: string): CardWidget | null {
   if (!text || typeof text !== 'string') return null;
   if (!looksLikeAboutCompany(text)) return null;
 
-  const imageUrl = extractImageUrlFromText(text);
-  const cleanText = cleanTextForCard(text);
+  const payload = extractStructuredAboutFromText(text);
+  console.log('[ChatCard] Structured about-company payload extracted:', {
+    name: payload.name, role: payload.role, company: payload.company,
+    tagline: !!payload.tagline, highlights: payload.highlights, bioCount: payload.bio?.length,
+  });
 
   return {
     template: 'card_widget',
     type: 'about_company',
-    payload: {
-      image: imageUrl,
-      description: cleanText,
-    },
+    payload,
   };
+}
+
+function tryParseCompanyProfile(text: string): CardWidget | null {
+  // Try 1: Parse the entire text as JSON
+  const directParse = safeParse(text.trim());
+  if (directParse.ok) {
+    const d = deepUnwrap(directParse.data);
+    const profile = transformCompanyProfileToAbout(Array.isArray(d) ? d : d);
+    if (profile) {
+      console.log('[ChatCard] Company profile extracted via direct parse');
+      return { template: 'card_widget', type: 'about_company', payload: profile };
+    }
+  }
+
+  // Try 2: Find [{ ... }] substring (handles surrounding text)
+  const arrStart = text.indexOf('[{');
+  if (arrStart >= 0) {
+    // Look for }] specifically (not just any ])
+    const closingPattern = /\}\s*\]/g;
+    let lastMatch: RegExpExecArray | null = null;
+    let m: RegExpExecArray | null;
+    while ((m = closingPattern.exec(text)) !== null) {
+      if (m.index >= arrStart) lastMatch = m;
+    }
+    if (lastMatch) {
+      const arrJson = text.slice(arrStart, lastMatch.index + lastMatch[0].length);
+      const parsed = safeParse(arrJson);
+      if (parsed.ok && Array.isArray(parsed.data)) {
+        const profile = transformCompanyProfileToAbout(parsed.data);
+        if (profile) {
+          console.log('[ChatCard] Company profile extracted via [{ }] pattern');
+          return { template: 'card_widget', type: 'about_company', payload: profile };
+        }
+      }
+    }
+  }
+
+  // Try 3: Find single { ... } object with company profile fields
+  if (text.includes('{')) {
+    const braceStart = text.indexOf('{');
+    const braceEnd = text.lastIndexOf('}');
+    if (braceStart >= 0 && braceEnd > braceStart) {
+      const objJson = text.slice(braceStart, braceEnd + 1);
+      const parsed = safeParse(objJson);
+      if (parsed.ok) {
+        const d = deepUnwrap(parsed.data);
+        const profile = transformCompanyProfileToAbout(d);
+        if (profile) {
+          console.log('[ChatCard] Company profile extracted via single object');
+          return { template: 'card_widget', type: 'about_company', payload: profile };
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function extractCardFromContent(content: string): CardWidget | null {
   if (!content || typeof content !== 'string') return null;
 
-  // Try JSON-based extraction first
+  console.log('[ChatCard] extractCardFromContent called, length:', content.length, 'preview:', content.substring(0, 120));
+
+  // Try company profile extraction first (handles arrays, objects, surrounding text)
+  const profileCard = tryParseCompanyProfile(content);
+  if (profileCard) return profileCard;
+
+  // Try JSON-based extraction (card_widget, slots, services, etc.)
   if (content.includes('{')) {
     const jsonBlocks = content.match(/```json\s*([\s\S]*?)```/g);
     if (jsonBlocks) {
@@ -327,6 +525,7 @@ function extractCardFromContent(content: string): CardWidget | null {
   }
 
   // Fallback: detect about_company from plain text (image + company keywords)
+  console.log('[ChatCard] Falling back to text-based about company detection');
   return extractAboutCompanyFromText(content);
 }
 
@@ -522,55 +721,160 @@ const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSe
   const [visible, setVisible] = useState(false);
   useEffect(() => { const t = setTimeout(() => setVisible(true), 100); return () => clearTimeout(t); }, []);
 
-  const text = payload.description || payload.text || '';
-  const renderedHTML = text ? DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true, async: false }) as string) : '';
+  const descText = payload.description || payload.text || '';
 
   return (
-    <div
-      style={{
-        fontFamily: CARD_FONT,
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(12px)',
-        transition: 'opacity 0.6s ease, transform 0.6s ease',
-      }}
+    <motion.div
+      initial={{ opacity: 0, y: 16, scale: 0.97 }}
+      animate={{ opacity: visible ? 1 : 0, y: visible ? 0 : 16, scale: visible ? 1 : 0.97 }}
+      transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+      style={{ fontFamily: CARD_FONT }}
     >
-      <div className="overflow-hidden rounded-2xl" style={{ background: 'transparent' }}>
-        {payload.image && (
-          <div className="w-full overflow-hidden rounded-2xl" style={{ maxHeight: '360px' }}>
-            <img
-              src={payload.image}
-              alt={payload.title || 'About the company'}
-              className="w-full h-full object-cover"
-              style={{ display: 'block' }}
-            />
+      <div className="rounded-2xl border border-white/30 shadow-xl overflow-hidden"
+        style={{ background: 'rgba(255, 255, 255, 0.45)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
+      >
+
+        {/* ── Header: Circular image + name/role ── */}
+        <div className="flex items-center gap-4 px-5 sm:px-6 pt-5 sm:pt-6 pb-3">
+          {payload.image && (
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-white/50 ring-offset-2 ring-offset-transparent shadow-lg">
+              <img
+                src={payload.image}
+                alt={payload.name || 'Company'}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+          <div className="min-w-0">
+            {payload.name && (
+              <h3 className="font-bold text-[#1a1a2e] truncate" style={{ fontSize: '1.2rem', lineHeight: 1.3 }}>
+                {payload.name}
+              </h3>
+            )}
+            {(payload.role || payload.company) && (
+              <p className="text-[#5a5a6e] text-sm mt-0.5">
+                {payload.role}{payload.role && payload.company && ' \u00B7 '}{payload.company}
+              </p>
+            )}
+            {payload.sectionTitle && (
+              <span className="inline-block mt-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold tracking-wide border border-[#af71f1]/20 text-[#af71f1]"
+                style={{ background: 'rgba(175, 113, 241, 0.08)' }}
+              >
+                {payload.sectionTitle}
+              </span>
+            )}
           </div>
-        )}
-        <div style={{ padding: '24px 4px' }}>
-          {payload.title && (
-            <h3
-              className="font-semibold text-[#1a1a2e]"
-              style={{ fontSize: '1.3rem', lineHeight: 1.4, marginBottom: '12px', letterSpacing: '-0.01em' }}
+        </div>
+
+        {/* ── Divider ── */}
+        <div className="mx-5 sm:mx-6 border-t border-white/40" />
+
+        {/* ── Body ── */}
+        <div className="px-5 sm:px-6 py-4 sm:py-5 space-y-4">
+
+          {/* Tagline */}
+          {payload.tagline && (
+            <div className="rounded-xl px-4 py-3 border border-white/40"
+              style={{ background: 'rgba(175, 113, 241, 0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
             >
+              <p className="text-[#7c4daf] text-sm sm:text-[0.9rem] leading-relaxed italic">
+                &ldquo;{payload.tagline}&rdquo;
+              </p>
+            </div>
+          )}
+
+          {/* Title heading */}
+          {payload.title && (
+            <h4 className="font-semibold text-[#1a1a2e]" style={{ fontSize: '1.05rem' }}>
               {payload.title}
-            </h3>
+            </h4>
           )}
-          {renderedHTML && (
-            <div
-              className="text-[#3a3a4a] prose prose-sm max-w-none"
-              style={{ fontSize: '0.95rem', lineHeight: 1.75 }}
-              dangerouslySetInnerHTML={{ __html: renderedHTML }}
-            />
+
+          {/* Description */}
+          {descText && (
+            <p className="text-[#3a3a4a] text-sm sm:text-[0.9rem] leading-relaxed">
+              {descText}
+            </p>
           )}
+
+          {/* Bio paragraphs */}
+          {payload.bio && payload.bio.length > 0 && (
+            <div className="space-y-2.5">
+              {payload.bio.map((paragraph, i) => (
+                <p key={i} className="text-[#3a3a4a] text-sm sm:text-[0.9rem] leading-relaxed">
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* ── Highlights / Badges ── */}
+          {payload.highlights && (
+            <div className="pt-1 space-y-3">
+              <p className="text-xs font-semibold text-[#9b9bac] uppercase tracking-wider">Highlights</p>
+              <div className="flex flex-wrap gap-2">
+                {payload.highlights.experience && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#7c4daf] border border-[#af71f1]/15"
+                    style={{ background: 'rgba(175, 113, 241, 0.08)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    {payload.highlights.experience}
+                  </span>
+                )}
+                {payload.highlights.framework && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-blue-700 border border-blue-200/40"
+                    style={{ background: 'rgba(219, 234, 254, 0.45)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+                  >
+                    <Workflow className="w-3.5 h-3.5" />
+                    {payload.highlights.framework}
+                  </span>
+                )}
+                {payload.highlights.mission && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-amber-700 border border-amber-200/40"
+                    style={{ background: 'rgba(254, 243, 199, 0.45)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+                  >
+                    <Target className="w-3.5 h-3.5" />
+                    {payload.highlights.mission}
+                  </span>
+                )}
+                {Array.isArray(payload.highlights.industries) && payload.highlights.industries.map((ind: string, i: number) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#3a3a4a] border border-white/40"
+                    style={{ background: 'rgba(243, 244, 246, 0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    {ind}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer with CTA ── */}
+        <div className="px-5 sm:px-6 pb-5 sm:pb-6 flex flex-wrap items-center gap-3">
           <button
             onClick={() => onSend('What services do you offer?')}
-            className="inline-flex items-center gap-1.5 font-medium text-[#af71f1] border border-[#af71f1]/40 rounded-full hover:bg-[#af71f1] hover:text-white transition-colors duration-200"
-            style={{ marginTop: '20px', padding: '10px 26px', fontSize: '0.9rem' }}
+            className="inline-flex items-center gap-1.5 font-semibold text-white bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors duration-200 shadow-md"
+            style={{ padding: '10px 24px', fontSize: '0.85rem' }}
           >
             Explore Services
+            <ChevronRight className="w-4 h-4" />
           </button>
+          {payload.website && (
+            <a
+              href={payload.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 font-medium text-[#af71f1] rounded-full hover:text-white hover:bg-[#af71f1] transition-colors duration-200 border border-white/40"
+              style={{ padding: '10px 24px', fontSize: '0.85rem', background: 'rgba(175, 113, 241, 0.06)' }}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              Visit Website
+            </a>
+          )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -847,6 +1151,16 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
             if ((data.event === 'agent_message' || data.event === 'message') && data.answer) {
               fullText += data.answer;
               setStreamedText(fullText);
+
+              // Try to extract card from accumulated text as soon as JSON is parseable
+              if (!extractedCard && fullText.includes('}]')) {
+                const card = tryParseCompanyProfile(fullText);
+                if (card) {
+                  console.log('[ChatDebug] Card extracted from streamed text');
+                  extractedCard = card;
+                  setPendingCardWidget(card);
+                }
+              }
             }
 
             if (data.event === 'agent_thought') {
@@ -854,6 +1168,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                 id: data.id || '', thought: data.thought || '', observation: data.observation || '',
                 tool: data.tool || '', tool_input: data.tool_input || '',
               };
+              console.log('[ChatDebug] agent_thought:', { tool: thought.tool, hasObservation: !!thought.observation, observationPreview: thought.observation?.substring(0, 150) });
               const existingIdx = agentThoughts.findIndex(t => t.id === thought.id);
               if (existingIdx >= 0) {
                 agentThoughts[existingIdx] = {
@@ -866,12 +1181,14 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
               }
               const card = extractCardFromThoughts(agentThoughts);
               if (card) {
+                console.log('[ChatDebug] Card extracted from thoughts:', card.type, card.payload);
                 extractedCard = card;
                 setPendingCardWidget(card);
               }
             }
 
             if (data.event === 'message_end') {
+              console.log('[ChatDebug] message_end. fullText preview:', fullText.substring(0, 200), 'extractedCard:', extractedCard?.type);
               if (!extractedCard && fullText) extractedCard = extractCardFromContent(fullText);
 
               if (!messageAdded) {
@@ -932,8 +1249,16 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     return DOMPurify.sanitize(parsed + cursor);
   };
 
-  // Safe stream rendering (Strips JSON data before parsing so it's not visible on screen)
-  const cleanStreamedText = stripJson(streamedText);
+  // Safe stream rendering – suppress display for responses that will become cards
+  const cleanStreamedText = (() => {
+    if (!streamedText) return '';
+    const trimmed = streamedText.trim();
+    // JSON array/object → will become a card, show shimmer
+    if (trimmed.startsWith('[{') || trimmed.startsWith('```json')) return '';
+    // About-company natural language → will become a card, show shimmer
+    if (looksLikeAboutCompany(trimmed)) return '';
+    return stripJson(streamedText);
+  })();
 
   return (
     <AnimatePresence>
