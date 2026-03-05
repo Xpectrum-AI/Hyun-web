@@ -471,3 +471,8 @@ header .shadow-md {
     letter-spacing: 0.2em;
   }
 }
+
+/* Consistent page background with subtle gradient tint */
+.page-bg {
+  background: linear-gradient(160deg, #f8fbff 0%, #fdfaff 35%, #faf7ff 65%, #f8fbff 100%);
+}

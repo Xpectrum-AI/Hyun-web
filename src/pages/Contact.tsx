@@ -55,16 +55,31 @@ const Contact = () => {
   ];
 
   return (
-    <div className="bg-white w-full min-h-screen">
-      <div className="bg-white w-full max-w-[1600px] mx-auto relative overflow-hidden">
+    <div className="page-bg w-full min-h-screen">
+      <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
         {/* Header */}
         <Header onBookDemo={() => setIsChatOpen(true)} />
 
         {/* Hero Section */}
-        <section className="relative w-full min-h-[70vh] sm:min-h-screen flex items-center justify-center pt-24 sm:pt-32 bg-white">
+        <section className="relative w-full min-h-[60vh] sm:min-h-[70vh] lg:min-h-screen flex items-center justify-center pt-16 sm:pt-24 lg:pt-32 overflow-hidden">
+          {/* Background gradients - Desktop */}
+          <div className="absolute w-[1219px] h-[677px] top-[300px] right-0 opacity-50 hidden lg:block">
+            <div className="relative h-[677px]">
+              <div className="absolute w-[516px] h-[518px] top-[110px] left-[703px] bg-[#efe9c0] rounded-[258px/259px] blur-[138px]" />
+              <div className="absolute w-[614px] h-[616px] top-0 left-[279px] bg-[#d0a4ff] rounded-[307px/308px] blur-[138px]" />
+              <div className="absolute w-[614px] h-[616px] top-[61px] left-0 bg-[#c0e9ef] rounded-[307px/308px] blur-[138px]" />
+            </div>
+          </div>
+          {/* Background gradients - Mobile/Tablet */}
+          <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
+            <div className="absolute -top-10 -right-16 w-[70vw] h-[70vw] max-w-[450px] max-h-[450px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[30%] left-[10%] w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[40%] -left-10 w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
+          </div>
+
           {/* Hero Content */}
-          <div className="flex flex-col w-full max-w-[1200px] items-start gap-8 sm:gap-12 lg:gap-16 px-4 sm:px-6 lg:px-8">
-            <h1 className="relative self-stretch font-normal text-black text-[36px] sm:text-[50px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[40px] sm:leading-[55px] md:leading-[75px] lg:leading-[90px] font-serif">
+          <div className="flex flex-col w-full max-w-[1200px] items-center lg:items-start gap-5 sm:gap-8 lg:gap-16 px-4 sm:px-6 lg:px-8 text-center lg:text-left relative z-10">
+            <h1 className="relative self-stretch font-normal text-black text-[42px] sm:text-[56px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[48px] sm:leading-[62px] md:leading-[75px] lg:leading-[90px] font-serif">
               <span className="font-bold italic">Contact Us</span>
             </h1>
 
@@ -92,7 +107,7 @@ const Contact = () => {
         </section>
 
         {/* Contact Form Section */}
-        <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto">
             {/* Section Header */}
             <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
@@ -181,7 +196,7 @@ const Contact = () => {
         </section>
 
         {/* Footer */}
-        <footer className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-white border-t border-gray-200">
+        <footer className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-white/80 backdrop-blur-sm border-t border-gray-200">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col md:flex-row items-center justify-between mb-6 sm:mb-8 gap-3">
               <p className="opacity-55 font-medium text-[#292929] text-xs sm:text-sm tracking-[0] leading-[18.9px]">

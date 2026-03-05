@@ -51,14 +51,14 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="bg-white w-full min-h-screen">
-      <div className="bg-white w-full max-w-[1600px] mx-auto relative overflow-hidden">
+    <div className="page-bg w-full min-h-screen">
+      <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
 
         {/* Header */}
         <Header onBookDemo={() => setIsChatOpen(true)} />
 
         {/* Hero Section */}
-        <section id="home" className="relative w-full min-h-screen flex items-center justify-center pt-24 sm:pt-32 overflow-hidden">
+        <section id="home" className="relative w-full min-h-[70vh] lg:min-h-screen flex items-center justify-center pt-16 sm:pt-24 lg:pt-32 overflow-hidden">
           {/* Background gradients - Desktop */}
           <div className="absolute w-[1219px] h-[677px] top-[210px] right-0 hidden lg:block">
             <div className="relative h-[677px]">
@@ -69,14 +69,14 @@ const Index = () => {
           </div>
           {/* Background gradients - Mobile/Tablet */}
           <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
-            <div className="absolute -top-10 -right-16 w-[55vw] h-[55vw] max-w-[350px] max-h-[350px] bg-[#efe9c0] rounded-full blur-[80px] opacity-50" />
-            <div className="absolute top-[30%] left-[15%] w-[50vw] h-[50vw] max-w-[320px] max-h-[320px] bg-[#d0a4ff] rounded-full blur-[80px] opacity-50" />
-            <div className="absolute top-[40%] -left-10 w-[50vw] h-[50vw] max-w-[320px] max-h-[320px] bg-[#c0e9ef] rounded-full blur-[80px] opacity-50" />
+            <div className="absolute -top-10 -right-16 w-[70vw] h-[70vw] max-w-[450px] max-h-[450px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[30%] left-[10%] w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[40%] -left-10 w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
           </div>
 
           {/* Hero Content */}
-          <div className="flex flex-col w-full max-w-[869px] items-start gap-10 sm:gap-16 px-4 sm:px-6 lg:px-8">
-            <h1 className="relative self-stretch font-normal text-black text-[36px] sm:text-[50px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[40px] sm:leading-[55px] md:leading-[75px] lg:leading-[90px] font-serif">
+          <div className="flex flex-col w-full max-w-[869px] items-center lg:items-start gap-6 sm:gap-10 lg:gap-16 px-4 sm:px-6 lg:px-8 text-center lg:text-left">
+            <h1 className="relative self-stretch font-normal text-black text-[42px] sm:text-[56px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[48px] sm:leading-[62px] md:leading-[75px] lg:leading-[90px] font-serif">
               <span className="font-semibold">Let innovative technologies work for you.</span>
             </h1>
 
@@ -132,7 +132,7 @@ const Index = () => {
         </section>
 
         {/* Solutions Section */}
-        <section id="solutions" className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <section id="solutions" className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-10 sm:mb-16">
               <p className="font-semibold text-[#9e9e9e] tracking-[4px] sm:tracking-[6.40px] leading-4 text-xs sm:text-sm mb-4">SOLUTIONS</p>
@@ -391,9 +391,9 @@ const Index = () => {
           </div>
           {/* Background gradients - Mobile/Tablet */}
           <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
-            <div className="absolute top-0 right-0 w-[50vw] h-[50vw] max-w-[300px] max-h-[300px] bg-[#efe9c0] rounded-full blur-[80px] opacity-50" />
-            <div className="absolute top-[10%] left-[20%] w-[45vw] h-[45vw] max-w-[280px] max-h-[280px] bg-[#d0a4ff] rounded-full blur-[80px] opacity-50" />
-            <div className="absolute bottom-0 -left-10 w-[45vw] h-[45vw] max-w-[280px] max-h-[280px] bg-[#c0e9ef] rounded-full blur-[80px] opacity-50" />
+            <div className="absolute top-0 right-0 w-[60vw] h-[60vw] max-w-[400px] max-h-[400px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[10%] left-[15%] w-[55vw] h-[55vw] max-w-[380px] max-h-[380px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute bottom-0 -left-10 w-[55vw] h-[55vw] max-w-[380px] max-h-[380px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
           </div>
 
           <div className="max-w-4xl mx-auto text-center relative z-10">
@@ -413,7 +413,7 @@ const Index = () => {
         </section>
 
         {/* Footer */}
-        <footer className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-white border-t border-gray-200">
+        <footer className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-white/80 backdrop-blur-sm border-t border-gray-200">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col md:flex-row items-center justify-between mb-6 sm:mb-8 gap-3">
               <p className="opacity-55 font-medium text-black text-xs sm:text-sm tracking-[0] leading-[18.9px]">

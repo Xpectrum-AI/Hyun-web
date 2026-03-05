@@ -75,13 +75,13 @@ const Solutions = () => {
   };
 
   return (
-    <div className="bg-white w-full min-h-screen">
-      <div className="bg-white w-full max-w-[1600px] mx-auto relative overflow-hidden">
+    <div className="page-bg w-full min-h-screen">
+      <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
         {/* Header */}
         <Header onBookDemo={() => setIsChatOpen(true)} />
 
         {/* Hero Section */}
-        <section className="relative w-full min-h-[70vh] sm:min-h-screen flex items-center justify-center pt-24 sm:pt-32 overflow-hidden">
+        <section className="relative w-full min-h-[60vh] sm:min-h-[70vh] lg:min-h-screen flex items-center justify-center pt-16 sm:pt-24 lg:pt-32 overflow-hidden">
           {/* Background gradients - Desktop */}
           <div className="absolute w-[1219px] h-[677px] top-[300px] right-0 opacity-50 hidden lg:block">
             <div className="relative h-[677px]">
@@ -92,20 +92,20 @@ const Solutions = () => {
           </div>
           {/* Background gradients - Mobile/Tablet */}
           <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
-            <div className="absolute -top-10 -right-16 w-[55vw] h-[55vw] max-w-[350px] max-h-[350px] bg-[#efe9c0] rounded-full blur-[80px] opacity-40" />
-            <div className="absolute top-[35%] left-[15%] w-[50vw] h-[50vw] max-w-[320px] max-h-[320px] bg-[#d0a4ff] rounded-full blur-[80px] opacity-40" />
-            <div className="absolute top-[45%] -left-10 w-[50vw] h-[50vw] max-w-[320px] max-h-[320px] bg-[#c0e9ef] rounded-full blur-[80px] opacity-40" />
+            <div className="absolute -top-10 -right-16 w-[70vw] h-[70vw] max-w-[450px] max-h-[450px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[35%] left-[10%] w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[45%] -left-10 w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
           </div>
 
           {/* Hero Content */}
-          <div className="flex flex-col w-full max-w-[1200px] items-start gap-8 sm:gap-16 px-4 sm:px-6 lg:px-8">
-            <h1 className="relative self-stretch font-semibold italic text-black text-[36px] sm:text-[50px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[40px] sm:leading-[55px] md:leading-[75px] lg:leading-[90px] font-serif">
+          <div className="flex flex-col w-full max-w-[1200px] items-center lg:items-start gap-5 sm:gap-10 lg:gap-16 px-4 sm:px-6 lg:px-8 text-center lg:text-left">
+            <h1 className="relative self-stretch font-semibold italic text-black text-[42px] sm:text-[56px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[48px] sm:leading-[62px] md:leading-[75px] lg:leading-[90px] font-serif">
               Solutions
             </h1>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-8">
+            <div className="flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-4 mb-2 sm:mb-8">
               <div className="w-24 sm:w-48 h-1 bg-gradient-to-r from-[#c0e9ef] to-[#d0a4ff]"></div>
-              <h2 className="font-normal text-black text-2xl sm:text-3xl md:text-4xl lg:text-5xl tracking-[0] leading-tight font-serif">
+              <h2 className="font-normal text-black text-2xl sm:text-3xl md:text-4xl lg:text-5xl tracking-[0] leading-snug font-serif">
                 <span className="font-semibold">Our Areas of</span>
                 <span className="font-semibold italic"> Practice</span>
               </h2>
@@ -125,9 +125,9 @@ const Solutions = () => {
           </div>
           {/* Background gradients - Mobile/Tablet */}
           <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
-            <div className="absolute top-[10%] -right-10 w-[50vw] h-[50vw] max-w-[300px] max-h-[300px] bg-[#efe9c0] rounded-full blur-[80px] opacity-40" />
-            <div className="absolute top-[5%] left-[20%] w-[45vw] h-[45vw] max-w-[280px] max-h-[280px] bg-[#d0a4ff] rounded-full blur-[80px] opacity-40" />
-            <div className="absolute top-[15%] -left-10 w-[45vw] h-[45vw] max-w-[280px] max-h-[280px] bg-[#c0e9ef] rounded-full blur-[80px] opacity-40" />
+            <div className="absolute top-[10%] -right-10 w-[60vw] h-[60vw] max-w-[400px] max-h-[400px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[5%] left-[15%] w-[55vw] h-[55vw] max-w-[380px] max-h-[380px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[15%] -left-10 w-[55vw] h-[55vw] max-w-[380px] max-h-[380px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
           </div>
 
           <div className="max-w-7xl mx-auto relative z-10">
@@ -231,9 +231,9 @@ const Solutions = () => {
           </div>
           {/* Background gradients - Mobile/Tablet */}
           <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
-            <div className="absolute top-0 right-0 w-[50vw] h-[50vw] max-w-[300px] max-h-[300px] bg-[#efe9c0] rounded-full blur-[80px] opacity-40" />
-            <div className="absolute top-[10%] left-[20%] w-[45vw] h-[45vw] max-w-[280px] max-h-[280px] bg-[#d0a4ff] rounded-full blur-[80px] opacity-40" />
-            <div className="absolute bottom-0 -left-10 w-[45vw] h-[45vw] max-w-[280px] max-h-[280px] bg-[#c0e9ef] rounded-full blur-[80px] opacity-40" />
+            <div className="absolute top-0 right-0 w-[60vw] h-[60vw] max-w-[400px] max-h-[400px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute top-[10%] left-[15%] w-[55vw] h-[55vw] max-w-[380px] max-h-[380px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+            <div className="absolute bottom-0 -left-10 w-[55vw] h-[55vw] max-w-[380px] max-h-[380px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
           </div>
 
           <div className="max-w-4xl mx-auto text-center relative z-10">
@@ -254,7 +254,7 @@ const Solutions = () => {
         </section>
 
         {/* Footer */}
-        <footer className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-white border-t border-gray-200">
+        <footer className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 bg-white/80 backdrop-blur-sm border-t border-gray-200">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col md:flex-row items-center justify-between mb-6 sm:mb-8 gap-3">
               <p className="opacity-55 font-medium text-black text-xs sm:text-sm tracking-[0] leading-[18.9px]">

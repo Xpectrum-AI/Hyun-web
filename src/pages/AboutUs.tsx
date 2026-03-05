@@ -14,7 +14,7 @@ const AboutUs = () => {
 
 
   return (
-    <div className="bg-white w-full min-h-screen">
+    <div className="page-bg w-full min-h-screen">
       <Header onBookDemo={() => setIsChatOpen(true)} />
       
       {/* Chat Interface */}
@@ -24,7 +24,7 @@ const AboutUs = () => {
       />
 
       {/* Main Content */}
-      <div className="bg-white w-full max-w-[1600px] mx-auto relative overflow-hidden">
+      <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
         {/* Background gradients - Desktop */}
         <div className="absolute w-[1219px] h-[677px] top-[300px] right-0 opacity-50 hidden lg:block">
           <div className="relative h-[677px]">
@@ -35,20 +35,20 @@ const AboutUs = () => {
         </div>
         {/* Background gradients - Mobile/Tablet */}
         <div className="absolute inset-0 overflow-hidden lg:hidden pointer-events-none">
-          <div className="absolute -top-10 -right-16 w-[55vw] h-[55vw] max-w-[350px] max-h-[350px] bg-[#efe9c0] rounded-full blur-[80px] opacity-40" />
-          <div className="absolute top-[25%] left-[10%] w-[50vw] h-[50vw] max-w-[320px] max-h-[320px] bg-[#d0a4ff] rounded-full blur-[80px] opacity-40" />
-          <div className="absolute top-[35%] -left-10 w-[50vw] h-[50vw] max-w-[320px] max-h-[320px] bg-[#c0e9ef] rounded-full blur-[80px] opacity-40" />
+          <div className="absolute -top-10 -right-16 w-[70vw] h-[70vw] max-w-[450px] max-h-[450px] bg-[#efe9c0] rounded-full blur-[90px] opacity-60" />
+          <div className="absolute top-[25%] left-[5%] w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#d0a4ff] rounded-full blur-[90px] opacity-60" />
+          <div className="absolute top-[35%] -left-10 w-[65vw] h-[65vw] max-w-[420px] max-h-[420px] bg-[#c0e9ef] rounded-full blur-[90px] opacity-60" />
         </div>
 
         {/* Hero Section */}
-        <section className="relative w-full min-h-[70vh] sm:min-h-screen flex items-center justify-center pt-24 sm:pt-32">
-          <div className="flex flex-col w-full max-w-[1200px] items-start gap-8 sm:gap-12 lg:gap-16 px-4 sm:px-6 lg:px-8">
-            <h1 className="relative self-stretch font-semibold italic text-black text-[36px] sm:text-[50px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[40px] sm:leading-[55px] md:leading-[75px] lg:leading-[90px] font-serif">
+        <section className="relative w-full min-h-[60vh] sm:min-h-[70vh] lg:min-h-screen flex items-center justify-center pt-16 sm:pt-24 lg:pt-32">
+          <div className="flex flex-col w-full max-w-[1200px] items-center lg:items-start gap-5 sm:gap-8 lg:gap-16 px-4 sm:px-6 lg:px-8 text-center lg:text-left">
+            <h1 className="relative self-stretch font-semibold italic text-black text-[42px] sm:text-[56px] md:text-[70px] lg:text-[90px] tracking-[0] leading-[48px] sm:leading-[62px] md:leading-[75px] lg:leading-[90px] font-serif">
               <span className="font-bold">About </span>
               <span className="font-semibold italic">Us</span>
             </h1>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-8">
+            <div className="flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-4 mb-2 sm:mb-8">
               <div className="w-24 sm:w-48 h-1 bg-gradient-to-r from-[#c0e9ef] to-[#d0a4ff]"></div>
               <h2 className="font-normal text-black text-xl sm:text-2xl md:text-3xl lg:text-4xl tracking-[0] leading-tight font-serif">
                 <span className="font-semibold">We specialize in changing the way people work so that people don't have to work</span>
@@ -239,7 +239,7 @@ const AboutUs = () => {
         </section>
 
         {/* Footer Section */}
-        <footer className="py-10 sm:py-16 px-4 sm:px-6 lg:px-8 bg-white border-t border-gray-100">
+        <footer className="py-10 sm:py-16 px-4 sm:px-6 lg:px-8 bg-white/80 backdrop-blur-sm border-t border-gray-100">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
               <div className="col-span-1 sm:col-span-2">
