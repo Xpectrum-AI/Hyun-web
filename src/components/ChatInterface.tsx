@@ -3,11 +3,12 @@ import {
   Send, X, Loader2, AlertCircle, Clock, CalendarDays, ChevronRight, Mic,
   Monitor, Bot, Cog, BarChart3, Search, PenLine, Rocket, Target,
   Lightbulb, Shield, Users, Globe, Zap, Database, Code, Layers,
-  Settings, BrainCircuit, Workflow, Network, type LucideIcon,
+  Settings, BrainCircuit, Workflow, Network, Phone, PhoneOff, type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { XpectrumVoice, type TranscriptionSegment } from "@xpectrum/sdk";
 import haLogo from "@/assets/HA.png";
 
 // ─── Dify API Config ────────────────────────────────────────────────────────
@@ -1039,6 +1040,77 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     return () => { stopListening(); };
   }, [stopListening]);
 
+  // ── Xpectrum Voice Call ──────────────────────────────────────
+  const xpectrumVoiceRef = useRef<XpectrumVoice | null>(null);
+  const [voiceCallActive, setVoiceCallActive] = useState(false);
+  const [voiceCallConnecting, setVoiceCallConnecting] = useState(false);
+  const [voiceTranscripts, setVoiceTranscripts] = useState<TranscriptionSegment[]>([]);
+  const [agentSpeaking, setAgentSpeaking] = useState(false);
+  const voiceTranscriptsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const baseUrl = import.meta.env.VITE_VOICE_BASE_URL;
+    const apiKey = import.meta.env.VITE_VOICE_API_KEY;
+    const agentName = import.meta.env.VITE_VOICE_AGENT_NAME;
+    if (baseUrl && apiKey && agentName) {
+      xpectrumVoiceRef.current = new XpectrumVoice({ baseUrl, apiKey, agentName });
+    }
+    return () => { xpectrumVoiceRef.current?.destroy(); };
+  }, []);
+
+  useEffect(() => {
+    voiceTranscriptsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [voiceTranscripts]);
+
+  const startVoiceCall = useCallback(async () => {
+    if (!xpectrumVoiceRef.current) {
+      setError('Voice call is not configured.');
+      return;
+    }
+    setVoiceCallConnecting(true);
+    setVoiceTranscripts([]);
+    setError('');
+    try {
+      await xpectrumVoiceRef.current.connect({
+        onConnected: () => {
+          setVoiceCallActive(true);
+          setVoiceCallConnecting(false);
+        },
+        onTranscription: (seg: TranscriptionSegment) => {
+          setVoiceTranscripts(prev => {
+            const idx = prev.findIndex(t => t.id === seg.id);
+            if (idx >= 0) { const u = [...prev]; u[idx] = seg; return u; }
+            return [...prev, seg];
+          });
+        },
+        onAgentSpeaking: (isSpeaking: boolean) => setAgentSpeaking(isSpeaking),
+        onDisconnected: () => {
+          setVoiceCallActive(false);
+          setVoiceCallConnecting(false);
+        },
+        onError: (err: { message: string }) => {
+          setError(err.message || 'Voice call error');
+          setVoiceCallActive(false);
+          setVoiceCallConnecting(false);
+        },
+      });
+    } catch {
+      setError('Failed to start voice call.');
+      setVoiceCallConnecting(false);
+    }
+  }, []);
+
+  const endVoiceCall = useCallback(() => {
+    xpectrumVoiceRef.current?.disconnect();
+    setVoiceCallActive(false);
+    setVoiceCallConnecting(false);
+  }, []);
+
+  // Cleanup voice call on chat close
+  useEffect(() => {
+    if (!isOpen && voiceCallActive) endVoiceCall();
+  }, [isOpen, voiceCallActive, endVoiceCall]);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && chat.length > 0)
       sessionStorage.setItem('hyun-chat-history', JSON.stringify(chat));
@@ -1332,6 +1404,20 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                           >
                             <Mic className={`w-4 h-4 sm:w-5 sm:h-5 ${isListening ? 'text-white' : ''}`} />
                           </button>
+                          <button
+                            type="button"
+                            onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
+                            disabled={voiceCallConnecting}
+                            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
+                              voiceCallActive
+                                ? 'bg-red-500 hover:bg-red-600 voice-pulse'
+                                : voiceCallConnecting
+                                  ? 'bg-amber-400 animate-pulse'
+                                  : 'bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]'
+                            } disabled:opacity-50`}
+                          >
+                            {voiceCallActive ? <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Phone className={`w-4 h-4 sm:w-5 sm:h-5 ${voiceCallConnecting ? 'text-white' : ''}`} />}
+                          </button>
                           <button type="submit" className="w-9 h-9 sm:w-10 sm:h-10 bg-[#af71f1] rounded-full flex items-center justify-center hover:bg-[#9c5ee0] transition-colors">
                             <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                           </button>
@@ -1432,48 +1518,130 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                   </div>
                 </div>
 
-                <div className="border-t border-gray-100 px-3 sm:px-6 py-3 sm:py-4 bg-white/95 backdrop-blur-sm">
-                  <div className="max-w-7xl w-full mx-auto">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-                      <div className="flex-1 relative">
-                        <input
-                          type="text" placeholder={isListening ? "Listening..." : "Type your message here..."}
-                          value={message}
-                          onChange={(e) => setMessage(e.target.value.slice(0, 2000))}
-                          onKeyDown={handleKeyPress}
-                          className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pr-12 sm:pr-14 bg-gray-50 border border-gray-200 rounded-full text-sm sm:text-base placeholder:text-gray-500 text-black focus:outline-none focus:ring-2 focus:ring-[#af71f1] focus:border-transparent"
-                          disabled={isLoading}
-                        />
-                        <button
-                          type="button"
-                          onClick={startListening}
-                          disabled={isLoading}
-                          className={`absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all ${
-                            isListening
-                              ? 'bg-red-500 hover:bg-red-600 voice-pulse'
-                              : 'bg-transparent hover:bg-gray-200 text-gray-400 hover:text-[#af71f1]'
-                          } disabled:opacity-40 disabled:cursor-not-allowed`}
-                        >
-                          <Mic className={`w-4 h-4 ${isListening ? 'text-white' : ''}`} />
-                        </button>
+                <AnimatePresence mode="wait">
+                  {voiceCallActive || voiceCallConnecting ? (
+                    /* ── Voice Call Overlay ── */
+                    <motion.div
+                      key="voice-call"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 20 }}
+                      transition={{ duration: 0.3 }}
+                      className="border-t border-white/30 px-3 sm:px-6 py-4 sm:py-5"
+                      style={{ background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+                    >
+                      <div className="max-w-7xl w-full mx-auto">
+                        {/* Status bar */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${voiceCallActive ? 'bg-green-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+                            <span className="text-sm font-semibold text-[#1a1a2e]">
+                              {voiceCallConnecting ? 'Connecting...' : 'Voice Call Active'}
+                            </span>
+                            {agentSpeaking && (
+                              <span className="flex items-center gap-1 text-xs text-[#af71f1] font-medium">
+                                <span className="flex gap-0.5">
+                                  <span className="w-1 h-3 bg-[#af71f1] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                  <span className="w-1 h-4 bg-[#af71f1] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                  <span className="w-1 h-2.5 bg-[#af71f1] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </span>
+                                Agent speaking
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={endVoiceCall}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-full transition-colors shadow-sm"
+                          >
+                            <PhoneOff className="w-4 h-4" />
+                            End Call
+                          </button>
+                        </div>
+
+                        {/* Live transcripts */}
+                        {voiceTranscripts.length > 0 && (
+                          <div className="max-h-32 overflow-y-auto rounded-xl px-3 py-2 space-y-1.5 border border-white/40"
+                            style={{ background: 'rgba(255,255,255,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+                          >
+                            {voiceTranscripts.map((t) => (
+                              <p key={t.id} className="text-sm leading-relaxed">
+                                <span className={`font-semibold ${t.speaker === 'agent' ? 'text-[#af71f1]' : 'text-[#1a1a2e]'}`}>
+                                  {t.speaker === 'agent' ? 'Agent' : 'You'}:
+                                </span>{' '}
+                                <span className={`text-[#3a3a4a] ${!t.isFinal ? 'opacity-60' : ''}`}>{t.text}</span>
+                              </p>
+                            ))}
+                            <div ref={voiceTranscriptsEndRef} />
+                          </div>
+                        )}
                       </div>
-                      <button
-                        className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={handleSend} disabled={isLoading || !message.trim()}
-                      >
-                        {isLoading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {suggestedQuestions.slice(0, 2).map((q, i) => (
-                        <button key={i} onClick={() => handleSuggestionClick(q)}
-                          className="px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border border-[#af71f1] text-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors">
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                    </motion.div>
+                  ) : (
+                    /* ── Normal Chat Input ── */
+                    <motion.div
+                      key="chat-input"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 20 }}
+                      transition={{ duration: 0.3 }}
+                      className="border-t border-gray-100 px-3 sm:px-6 py-3 sm:py-4 bg-white/95 backdrop-blur-sm"
+                    >
+                      <div className="max-w-7xl w-full mx-auto">
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                          <div className="flex-1 relative">
+                            <input
+                              type="text" placeholder={isListening ? "Listening..." : "Type your message here..."}
+                              value={message}
+                              onChange={(e) => setMessage(e.target.value.slice(0, 2000))}
+                              onKeyDown={handleKeyPress}
+                              className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pr-12 sm:pr-14 bg-gray-50 border border-gray-200 rounded-full text-sm sm:text-base placeholder:text-gray-500 text-black focus:outline-none focus:ring-2 focus:ring-[#af71f1] focus:border-transparent"
+                              disabled={isLoading}
+                            />
+                            <button
+                              type="button"
+                              onClick={startListening}
+                              disabled={isLoading}
+                              className={`absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all ${
+                                isListening
+                                  ? 'bg-red-500 hover:bg-red-600 voice-pulse'
+                                  : 'bg-transparent hover:bg-gray-200 text-gray-400 hover:text-[#af71f1]'
+                              } disabled:opacity-40 disabled:cursor-not-allowed`}
+                            >
+                              <Mic className={`w-4 h-4 ${isListening ? 'text-white' : ''}`} />
+                            </button>
+                          </div>
+                          {/* Voice Call button */}
+                          <button
+                            onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
+                            disabled={voiceCallConnecting}
+                            className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center rounded-full transition-all ${
+                              voiceCallConnecting
+                                ? 'bg-amber-400 animate-pulse'
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            <Phone className={`w-4 h-4 sm:w-5 sm:h-5 ${voiceCallConnecting ? 'text-white' : ''}`} />
+                          </button>
+                          {/* Send button */}
+                          <button
+                            className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={handleSend} disabled={isLoading || !message.trim()}
+                          >
+                            {isLoading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {suggestedQuestions.slice(0, 2).map((q, i) => (
+                            <button key={i} onClick={() => handleSuggestionClick(q)}
+                              className="px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border border-[#af71f1] text-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors">
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </LayoutGroup>
