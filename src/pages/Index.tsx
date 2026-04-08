@@ -117,7 +117,7 @@ const Index = () => {
                 <li>General IT Consulting</li>
                 <li>Agentic AI Solutions</li>
                 <li>Automation Solutions</li>
-                <li>Data Transformation Solutions</li>
+                <li>App Creation</li>
               </ul>
               <Button 
                 variant="outline"
@@ -299,7 +299,7 @@ const Index = () => {
                 </motion.div>
               </motion.div>
 
-              {/* Data Transformation Solutions */}
+              {/* App Creation */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -326,7 +326,7 @@ const Index = () => {
                       <img className="w-8 h-8" alt="Icon" src={dataTransformationIcon} />
                     </div>
                     <div className="font-semibold text-[#1a1a2e] text-2xl tracking-[-0.40px] leading-[28px] mb-6 transition-all duration-300 ease-in-out group-hover:translate-y-[-2px] text-center">
-                      Data Transformation Solutions
+                      App Creation
                     </div>
                     <div className="mt-auto text-center">
                       <div className="text-sm text-[#9b9bac] font-medium">Click to learn more</div>
@@ -339,7 +339,7 @@ const Index = () => {
                     style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'rgba(255, 255, 255, 0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
                   >
                     <div className="font-semibold text-[#1a1a2e] text-2xl tracking-[-0.40px] leading-[28px] mb-6 text-center">
-                      Data Transformation Solutions
+                      App Creation
                     </div>
                     <div className="text-[#3a3a4a] text-base leading-relaxed text-center">
                       The most productive way to consolidate data and bring analytics that matters.

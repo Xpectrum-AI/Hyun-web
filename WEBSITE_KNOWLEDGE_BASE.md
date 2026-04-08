@@ -37,7 +37,7 @@ Hyun & Associates offers four main areas of practice:
 - **Focus:** Robotic Process Automation (RPA) for repetitive tasks
 - **Use Cases:** Automating routine business processes
 
-### 4. Data Transformation Solutions
+### 4. App Creation
 - **Description:** The most productive way to consolidate data and bring analytics that matters.
 - **Focus:** Data consolidation, analytics, and business intelligence
 

@@ -52,7 +52,7 @@ const Solutions = () => {
     },
     {
       id: 4,
-      title: "Data Transformation Solutions",
+      title: "App Creation",
       description: "The most productive way to consolidate data and bring analytics that matters.",
       image: dataTransformationPicture,
       iconBg: "#eff1ff",
