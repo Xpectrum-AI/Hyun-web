@@ -978,15 +978,15 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
 
   // ── XpectrumChat client initialization ──────────────────────────
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_CHAT_BASE_URL;
-    const apiKey = import.meta.env.VITE_CHAT_API_KEY;
-    if (baseUrl && apiKey) {
-      chatClientRef.current = new XpectrumChat({
-        baseUrl,
-        apiKey,
-        user: getUserIdentifier(),
-      });
-    }
+    // When VITE_CHAT_BASE_URL is empty, use the current origin so requests
+    // go through the Netlify Edge Function proxy at /chat-messages.
+    const baseUrl = import.meta.env.VITE_CHAT_BASE_URL || window.location.origin;
+    const apiKey = import.meta.env.VITE_CHAT_API_KEY || 'proxy';
+    chatClientRef.current = new XpectrumChat({
+      baseUrl,
+      apiKey,
+      user: getUserIdentifier(),
+    });
     return () => { chatClientRef.current?.destroy(); };
   }, []);
 

@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8000,
+    proxy: {
+      // Forward /chat-messages to the local Express backend proxy
+      '/chat-messages': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [
     react(),

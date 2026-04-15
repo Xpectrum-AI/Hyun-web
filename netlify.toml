@@ -23,10 +23,8 @@
   to = "/.netlify/functions/voice-integration/:splat"
   status = 200
 
-[[redirects]]
-  from = "/chat"
-  to = "/.netlify/functions/chatbot-proxy"
-  status = 200
+# Chat proxy is handled by the edge function (netlify/edge-functions/chat-proxy.js)
+# which supports SSE streaming. The edge function config is declared in the file itself.
 
 [[redirects]]
   from = "/health"

@@ -15,7 +15,7 @@ const API_URL = process.env.XPECTRUM_API_BASE_URL
     : 'https://xpectrum-main-app-prod-cocfr.ondigitalocean.app/api/v1/chat-messages';
 const API_KEY = process.env.XPECTRUM_API_KEY || process.env.DIFY_API_KEY || 'app-MCjDesYMQxIhZjdgziHWyN1G';
 
-app.post('/chat', async (req, res) => {
+app.post(['/chat', '/chat-messages'], async (req, res) => {
   try {
     console.log('=== CHAT REQUEST DEBUG ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
