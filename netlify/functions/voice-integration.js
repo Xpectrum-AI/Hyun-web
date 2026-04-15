@@ -1,9 +1,10 @@
 exports.handler = async (event, context) => {
-  // Enable CORS
+  // Enable CORS + JSON content type
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, x-api-key',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Content-Type': 'application/json',
   };
 
   // Handle preflight requests
