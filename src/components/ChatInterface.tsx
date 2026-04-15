@@ -1105,8 +1105,12 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     const baseUrl = import.meta.env.VITE_VOICE_BASE_URL || `${window.location.origin}/voice`;
     const apiKey = import.meta.env.VITE_VOICE_API_KEY || 'proxy';
     const agentName = import.meta.env.VITE_VOICE_AGENT_NAME;
+    console.log('[Voice Init]', { baseUrl, apiKey: apiKey ? '***' : 'MISSING', agentName: agentName || 'MISSING' });
     if (agentName) {
       xpectrumVoiceRef.current = new XpectrumVoice({ baseUrl, apiKey, agentName });
+      console.log('[Voice Init] XpectrumVoice created successfully');
+    } else {
+      console.error('[Voice Init] Missing agentName — voice will not work');
     }
     return () => { xpectrumVoiceRef.current?.destroy(); };
   }, []);
@@ -1116,7 +1120,9 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
   }, [voiceTranscripts]);
 
   const startVoiceCall = useCallback(async () => {
+    console.log('[Voice Call] Button clicked, ref:', !!xpectrumVoiceRef.current);
     if (!xpectrumVoiceRef.current) {
+      console.error('[Voice Call] XpectrumVoice not initialized');
       setError('Voice call is not configured.');
       return;
     }
@@ -1124,6 +1130,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     setVoiceTranscripts([]);
     setError('');
     try {
+      console.log('[Voice Call] Calling connect()...');
       await xpectrumVoiceRef.current.connect({
         onConnected: () => {
           setVoiceCallActive(true);
@@ -1147,7 +1154,8 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
           setVoiceCallConnecting(false);
         },
       });
-    } catch {
+    } catch (err) {
+      console.error('[Voice Call] connect() failed:', err);
       setError('Failed to start voice call.');
       setVoiceCallConnecting(false);
     }
