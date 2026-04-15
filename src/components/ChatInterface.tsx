@@ -1100,10 +1100,12 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
   const voiceTranscriptsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_VOICE_BASE_URL;
-    const apiKey = import.meta.env.VITE_VOICE_API_KEY;
+    // When VITE_VOICE_BASE_URL is empty, use the current origin + /voice so requests
+    // go through the Netlify function proxy at /voice/*.
+    const baseUrl = import.meta.env.VITE_VOICE_BASE_URL || `${window.location.origin}/voice`;
+    const apiKey = import.meta.env.VITE_VOICE_API_KEY || 'proxy';
     const agentName = import.meta.env.VITE_VOICE_AGENT_NAME;
-    if (baseUrl && apiKey && agentName) {
+    if (agentName) {
       xpectrumVoiceRef.current = new XpectrumVoice({ baseUrl, apiKey, agentName });
     }
     return () => { xpectrumVoiceRef.current?.destroy(); };
