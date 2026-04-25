@@ -15,12 +15,6 @@ const AboutUs = () => {
 
   return (
     <div className="page-bg w-full min-h-screen">
-      {/* Chat Interface */}
-      <ChatInterface
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-      />
-
       {/* Main Content */}
       <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
         {/* Header */}
@@ -282,6 +276,8 @@ const AboutUs = () => {
           </div>
         </footer>
       </div>
+
+      <ChatInterface isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
     </div>
   );
 };
