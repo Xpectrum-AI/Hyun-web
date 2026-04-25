@@ -12,10 +12,17 @@ export default defineConfig(({ mode }) => {
     host: "::",
     port: 8000,
     proxy: {
-      // Forward /chat-messages to the local Express backend proxy
+      // Forward /chat-messages to the Xpectrum chat API, injecting the real API key
       '/chat-messages': {
-        target: 'http://localhost:3001',
+        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/api/v1',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            if (env.XPECTRUM_API_KEY) {
+              proxyReq.setHeader('Authorization', `Bearer ${env.XPECTRUM_API_KEY}`);
+            }
+          });
+        },
       },
       // Forward /voice/* to the voice integration server, injecting the real API key
       '/voice': {

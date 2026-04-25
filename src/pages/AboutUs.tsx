@@ -15,8 +15,6 @@ const AboutUs = () => {
 
   return (
     <div className="page-bg w-full min-h-screen">
-      <Header onBookDemo={() => setIsChatOpen(true)} />
-      
       {/* Chat Interface */}
       <ChatInterface
         isOpen={isChatOpen}
@@ -25,6 +23,9 @@ const AboutUs = () => {
 
       {/* Main Content */}
       <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
+        {/* Header */}
+        <Header onBookDemo={() => setIsChatOpen(true)} />
+        
         {/* Background gradients - Desktop */}
         <div className="absolute w-[1219px] h-[677px] top-[300px] right-0 opacity-50 hidden lg:block">
           <div className="relative h-[677px]">

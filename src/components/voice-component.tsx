@@ -1,9 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { XpectrumVoice, type TranscriptionSegment } from "@xpectrum/sdk";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { XpectrumVoice, type TranscriptionSegment } from "@/lib/xpectrum";
 
 export default function VoiceCall() {
   const voiceRef = useRef<XpectrumVoice | null>(null);
@@ -12,9 +9,9 @@ export default function VoiceCall() {
 
   useEffect(() => {
     voiceRef.current = new XpectrumVoice({
-      baseUrl: process.env.VITE_PUBLIC_VOICE_BASE_URL,
-      apiKey: process.env.VITE_PUBLIC_VOICE_API_KEY ,
-      agentName: process.env.VITE_PUBLIC_AGENT_NAME,
+      baseUrl: import.meta.env.VITE_VOICE_BASE_URL || '',
+      apiKey: import.meta.env.VITE_VOICE_API_KEY || '',
+      agentName: import.meta.env.VITE_VOICE_AGENT_NAME || '',
     });
     return () => voiceRef.current?.destroy();
   }, []);

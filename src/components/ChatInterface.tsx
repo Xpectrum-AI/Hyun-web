@@ -6,10 +6,61 @@ import {
   Settings, BrainCircuit, Workflow, Network, Phone, PhoneOff, type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
-import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@xpectrum/sdk";
+import ReactMarkdown from "react-markdown";
+import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
 import haLogo from "@/assets/HA.png";
+
+// ─── Markdown Text Renderer ────────────────────────────────────────────────
+// Renders markdown bold (**text**), italic (*text*), links [text](url), etc.
+function MarkdownText({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        // Render paragraphs as spans wrapped in a div to avoid nesting <p> in <p>
+        p: ({ children }) => <div className="mb-2 last:mb-0">{children}</div>,
+        // Bold
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        // Italic
+        em: ({ children }) => <em className="italic">{children}</em>,
+        // Links open in new tab
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#af71f1] underline hover:text-[#9c5ee0] transition-colors"
+          >
+            {children}
+          </a>
+        ),
+        // Unordered lists
+        ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-2">{children}</ul>,
+        // Ordered lists
+        ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-2">{children}</ol>,
+        // List items
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        // Code inline
+        code: ({ children }) => (
+          <code className="bg-gray-100 text-[#af71f1] px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
+        ),
+        // Code blocks
+        pre: ({ children }) => (
+          <pre className="bg-gray-100 rounded-lg p-3 overflow-x-auto text-sm mb-2">{children}</pre>
+        ),
+        // Headings
+        h1: ({ children }) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-base font-bold mb-1">{children}</h3>,
+        // Blockquote
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-4 border-[#af71f1]/30 pl-3 italic text-gray-600 mb-2">{children}</blockquote>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
 
 // ─── Card Widget Types ──────────────────────────────────────────────────────
 type CardWidget = {
@@ -723,16 +774,6 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
 };
 
 // Helper: render text with clickable URLs
-const linkifyText = (text: string) => {
-  const urlRe = /(https?:\/\/[^\s<>"')\],]+)/g;
-  const parts = text.split(urlRe);
-  return parts.map((part, i) =>
-    urlRe.test(part) ? (
-      <a key={i} href={part.replace(/[.,;:!?)]+$/, '')} target="_blank" rel="noopener noreferrer" className="text-[#af71f1] underline underline-offset-2 hover:text-[#9c5ee0] break-all">{part.replace(/[.,;:!?)]+$/, '')}</a>
-    ) : part
-  );
-};
-
 const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSend: (msg: string) => void }) => {
   const [visible, setVisible] = useState(false);
   useEffect(() => { const t = setTimeout(() => setVisible(true), 100); return () => clearTimeout(t); }, []);
@@ -752,33 +793,20 @@ const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSe
 
         {/* ── Header: Circular image + name/role ── */}
         <div className="flex items-center gap-4 px-5 sm:px-6 pt-5 sm:pt-6 pb-3">
-          {payload.image && (
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-white/50 ring-offset-2 ring-offset-transparent shadow-lg">
-              <img
-                src={payload.image}
-                alt={payload.name || 'Company'}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          )}
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-white/50 ring-offset-2 ring-offset-transparent shadow-lg">
+            <img
+              src="https://hyunandassociatesllc.com/assets/hyunperson-DiWXyhXY.jpg"
+              alt="Hyun Suh"
+              className="w-full h-full object-cover"
+            />
+          </div>
           <div className="min-w-0">
-            {payload.name && (
-              <h3 className="font-bold text-[#1a1a2e] truncate" style={{ fontSize: '1.2rem', lineHeight: 1.3 }}>
-                {payload.name}
-              </h3>
-            )}
-            {(payload.role || payload.company) && (
-              <p className="text-[#5a5a6e] text-sm mt-0.5">
-                {payload.role}{payload.role && payload.company && ' \u00B7 '}{payload.company}
-              </p>
-            )}
-            {payload.sectionTitle && (
-              <span className="inline-block mt-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold tracking-wide border border-[#af71f1]/20 text-[#af71f1]"
-                style={{ background: 'rgba(175, 113, 241, 0.08)' }}
-              >
-                {payload.sectionTitle}
-              </span>
-            )}
+            <h3 className="font-bold text-[#1a1a2e] truncate" style={{ fontSize: '1.2rem', lineHeight: 1.3 }}>
+              Hyun Suh
+            </h3>
+            <p className="text-[#5a5a6e] text-sm mt-0.5">
+              CEO and President · Hyun & Associates
+            </p>
           </div>
         </div>
 
@@ -799,27 +827,20 @@ const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSe
             </div>
           )}
 
-          {/* Title heading */}
-          {payload.title && (
-            <h4 className="font-semibold text-[#1a1a2e]" style={{ fontSize: '1.05rem' }}>
-              {payload.title}
-            </h4>
-          )}
-
           {/* Description */}
           {descText && (
-            <p className="text-[#3a3a4a] text-sm sm:text-[0.9rem] leading-relaxed">
-              {linkifyText(descText)}
-            </p>
+            <div className="text-[#3a3a4a] text-sm sm:text-[0.9rem] leading-relaxed">
+              <MarkdownText>{descText}</MarkdownText>
+            </div>
           )}
 
           {/* Bio paragraphs */}
           {payload.bio && payload.bio.length > 0 && (
             <div className="space-y-2.5">
               {payload.bio.map((paragraph, i) => (
-                <p key={i} className="text-[#3a3a4a] text-sm sm:text-[0.9rem] leading-relaxed">
-                  {linkifyText(paragraph)}
-                </p>
+                <div key={i} className="text-[#3a3a4a] text-sm sm:text-[0.9rem] leading-relaxed">
+                  <MarkdownText>{paragraph}</MarkdownText>
+                </div>
               ))}
             </div>
           )}
@@ -1352,12 +1373,6 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     }
   }, [isListening]);
 
-  const renderSafeHTML = (text: string, showCursor = false) => {
-    const parsed = marked.parse(text, { breaks: true, gfm: true });
-    const cursor = showCursor ? '<span class="animate-pulse text-black/60 ml-1">|</span>' : '';
-    return DOMPurify.sanitize(parsed + cursor);
-  };
-
   // Safe stream rendering – suppress display for responses that will become cards
   const cleanStreamedText = (() => {
     if (!streamedText) return '';
@@ -1504,7 +1519,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                             <div className="rounded-2xl rounded-bl-md px-1 py-1 w-full">
                               {msg.text ? (
                                 <div className="text-black text-base leading-relaxed break-words px-3 py-2">
-                                  <span dangerouslySetInnerHTML={{ __html: renderSafeHTML(msg.text) }} />
+                                  <MarkdownText>{msg.text}</MarkdownText>
                                 </div>
                               ) : null}
                             </div>
@@ -1534,7 +1549,8 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                           <div className="max-w-[85%] flex items-start gap-3">
                             <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
                             <div className="text-black text-base leading-relaxed break-words px-3 py-2 streaming-text">
-                              <span dangerouslySetInnerHTML={{ __html: renderSafeHTML(cleanStreamedText, true) }} />
+                              <MarkdownText>{cleanStreamedText}</MarkdownText>
+                              <span className="animate-pulse text-black/60 ml-1">|</span>
                             </div>
                           </div>
                         ) : (

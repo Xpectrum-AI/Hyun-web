@@ -40,3 +40,10 @@
   from = "/test-voice"
   to = "/.netlify/functions/test-voice"
   status = 200
+
+# SPA fallback - must be last redirect rule
+# Routes all non-API requests to index.html for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

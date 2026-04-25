@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { XpectrumChat } from '@xpectrum/sdk';
+import { XpectrumChat } from '@/lib/xpectrum';
 
 interface Message {
   id: string;
