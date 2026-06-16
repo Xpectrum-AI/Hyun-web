@@ -102,10 +102,10 @@ const stripJson = (str: string) => {
   if (!str) return str;
   return str
     .replace(/```json[\s\S]*?(```|$)/g, '')
-    .replace(/\{[\s\S]*"slots"[\s\S]*\}/g, '')
-    .replace(/\{[\s\S]*"services"[\s\S]*\}/g, '')
-    .replace(/\{[\s\S]*"about_company"[\s\S]*\}/g, '')
-    .replace(/\{[\s\S]*"company_info"[\s\S]*\}/g, '')
+    .replace(/\{[\s\S]*?"slots"[\s\S]*?\}/g, '')
+    .replace(/\{[\s\S]*?"services"[\s\S]*?\}/g, '')
+    .replace(/\{[\s\S]*?"about_company"[\s\S]*?\}/g, '')
+    .replace(/\{[\s\S]*?"company_info"[\s\S]*?\}/g, '')
     // Strip complete JSON arrays with company profile data
     .replace(/\[\s*\{[\s\S]*?"(?:\$oid|image_url|bio)"[\s\S]*?\}\s*\]/g, '')
     // Strip partial JSON arrays still streaming (company profile data)
@@ -1799,11 +1799,17 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const cleanStreamedText = (() => {
     if (!streamedText) return '';
     const trimmed = streamedText.trim();
-    // JSON array/object → will become a card, show shimmer
-    if (trimmed.startsWith('[{') || trimmed.startsWith('```json')) return '';
-    // About-company natural language → will become a card, show shimmer
+    // Pure JSON response (object or array) → show dots, will become a card
+    if (trimmed.startsWith('{') || trimmed.startsWith('[{') || trimmed.startsWith('```json')) return '';
+    // About-company natural language → will become a card, show dots
     if (looksLikeAboutCompany(trimmed)) return '';
-    return stripJson(streamedText);
+    // Strip completed JSON blobs
+    const stripped = stripJson(streamedText);
+    // Strip partial/unclosed JSON that leaked through (e.g. {"services": [...  still streaming)
+    const partialJsonIdx = stripped.search(/\{[^}]*"(?:services|slots|steps|card_widget|about_company|company_info|available_slots)"/);
+    if (partialJsonIdx > 0) return stripped.slice(0, partialJsonIdx).trim();
+    if (partialJsonIdx === 0) return '';
+    return stripped;
   })();
 
   return (
@@ -1816,11 +1822,11 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           {/* Injecting CSS for the smooth fade-in streaming chunks */}
           <style>{`
             @keyframes fadeInChunk {
-              from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
-              to { opacity: 1; transform: translateY(0); filter: blur(0); }
+              from { opacity: 0; }
+              to { opacity: 1; }
             }
             .streaming-text > * {
-              animation: fadeInChunk 0.4s ease-out forwards;
+              animation: fadeInChunk 0.2s ease-out forwards;
             }
             @keyframes flipCardEnter {
               from { opacity: 0; transform: translateY(12px); }
