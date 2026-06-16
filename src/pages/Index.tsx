@@ -1,21 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
+import { Monitor, BrainCircuit, Workflow, Database } from "lucide-react";
 import Header from "@/components/Header";
 import ChatInterface from "@/components/ChatInterface";
 import spectrumAiLogo from "@/assets/xpectrumai.png";
-import aiIcon from "@/assets/AI Icon.jpg";
-import automationIcon from "@/assets/automation icon.jpg";
-import dataTransformationIcon from "@/assets/Data Transformation Icon.png";
-import deliverIcon from "@/assets/Deliver.jpeg";
 
 const Index = () => {
-  // Check if this is an initial visit (no hash) or navigation (with hash)
-  const isInitialVisit = !window.location.hash;
-  const [isChatOpen, setIsChatOpen] = useState(isInitialVisit); // Only open chat on initial visit
+  // Only #home (or landing section hashes) shows the landing page; everything else opens chat.
+  const [isChatOpen, setIsChatOpen] = useState(() => window.location.hash !== '#home');
   const [flippedCards, setFlippedCards] = useState<Set<number>>(new Set());
   const navigate = useNavigate();
+
+  // URL rules:
+  //   /        → welcome chat screen (home)
+  //   #chat    → active conversation (has messages)
+  //   #home    → landing page
+  useEffect(() => {
+    if (!isChatOpen) {
+      window.history.replaceState(null, '', '#home');
+    } else {
+      // If returning to chat and a conversation already exists, jump straight to #chat
+      const hasConversation = !!localStorage.getItem('hyun-conversation-id');
+      if (hasConversation) window.history.replaceState(null, '', '#chat');
+      else if (window.location.hash === '#home') window.history.replaceState(null, '', '/');
+    }
+  }, [isChatOpen]);
+
+  const handleChatActive = useCallback(() => {
+    if (window.location.hash !== '#chat') {
+      window.history.replaceState(null, '', '#chat');
+    }
+  }, []);
 
   // Handle card click to toggle flip
   const handleCardClick = (cardIndex: number) => {
@@ -30,24 +47,16 @@ const Index = () => {
     });
   };
 
-  // Handle hash changes to control chat visibility
+  // Close chat when the user navigates to a landing-page section (#home, #about, etc.)
   useEffect(() => {
     const handleHashChange = () => {
-      if (window.location.hash === '#home') {
-        setIsChatOpen(false); // Close chat when navigating to home
-        setFlippedCards(new Set()); // Reset all cards to unflipped state
+      if (window.location.hash !== '#chat') {
+        setIsChatOpen(false);
+        setFlippedCards(new Set());
       }
     };
-
-    // Listen for hash changes
     window.addEventListener('hashchange', handleHashChange);
-    
-    // Check initial hash
-    handleHashChange();
-
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-    };
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   return (
@@ -167,7 +176,7 @@ const Index = () => {
                       className="w-14 h-14 rounded-xl flex items-center justify-center mb-8 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:rotate-3 border border-white/50 shadow-sm"
                       style={{ background: 'rgba(255, 255, 255, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
                     >
-                      <img className="w-8 h-8" alt="Icon" src={deliverIcon} />
+                      <Monitor size={32} className="text-[#af71f1]" strokeWidth={1.6} />
                     </div>
                     <div className="font-semibold text-[#1a1a2e] text-2xl tracking-[-0.40px] leading-[28px] mb-6 transition-all duration-300 ease-in-out group-hover:translate-y-[-2px] text-center">
                       General IT Consulting
@@ -219,7 +228,7 @@ const Index = () => {
                       className="w-14 h-14 rounded-xl flex items-center justify-center mb-8 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:rotate-3 border border-white/50 shadow-sm"
                       style={{ background: 'rgba(255, 255, 255, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
                     >
-                      <img className="w-8 h-8" alt="Icon" src={aiIcon} />
+                      <BrainCircuit size={32} className="text-[#af71f1]" strokeWidth={1.6} />
                     </div>
                     <div className="font-semibold text-[#1a1a2e] text-2xl tracking-[-0.40px] leading-[28px] mb-6 transition-all duration-300 ease-in-out group-hover:translate-y-[-2px] text-center">
                       Agentic AI Solutions
@@ -271,7 +280,7 @@ const Index = () => {
                       className="w-14 h-14 rounded-xl flex items-center justify-center mb-8 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:rotate-3 border border-white/50 shadow-sm"
                       style={{ background: 'rgba(255, 255, 255, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
                     >
-                      <img className="w-8 h-8" alt="Icon" src={automationIcon} />
+                      <Workflow size={32} className="text-[#af71f1]" strokeWidth={1.6} />
                     </div>
                     <div className="font-semibold text-[#1a1a2e] text-2xl tracking-[-0.40px] leading-[28px] mb-6 transition-all duration-300 ease-in-out group-hover:translate-y-[-2px] text-center">
                       Automation Solutions
@@ -323,7 +332,7 @@ const Index = () => {
                       className="w-14 h-14 rounded-xl flex items-center justify-center mb-8 transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:rotate-3 border border-white/50 shadow-sm"
                       style={{ background: 'rgba(255, 255, 255, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
                     >
-                      <img className="w-8 h-8" alt="Icon" src={dataTransformationIcon} />
+                      <Database size={32} className="text-[#af71f1]" strokeWidth={1.6} />
                     </div>
                     <div className="font-semibold text-[#1a1a2e] text-2xl tracking-[-0.40px] leading-[28px] mb-6 transition-all duration-300 ease-in-out group-hover:translate-y-[-2px] text-center">
                       App Creation
@@ -463,7 +472,7 @@ const Index = () => {
         </footer>
       </div>
 
-      <ChatInterface isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <ChatInterface isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onChatActive={handleChatActive} />
     </div>
   );
 };

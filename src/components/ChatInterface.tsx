@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-  Send, X, Loader2, AlertCircle, Clock, CalendarDays, ChevronRight, Mic,
+  Send, X, Loader2, AlertCircle, Clock, CalendarDays, ChevronRight, Mic, RotateCcw,
   Monitor, Bot, Cog, BarChart3, Search, PenLine, Rocket, Target,
   Lightbulb, Shield, Users, Globe, Zap, Database, Code, Layers,
   Settings, BrainCircuit, Workflow, Network, Phone, PhoneOff, type LucideIcon,
@@ -93,6 +93,7 @@ type ChatMessage = {
   role: 'user' | 'bot';
   text: string;
   cardWidget?: CardWidget | null;
+  suggestions?: string[];
 };
 
 // ─── Helper: Clean JSON from Text Streams ───────────────────────────────────
@@ -326,16 +327,39 @@ function extractCardFromObservation(observation: string): CardWidget | null {
   return null;
 }
 
+// Normalize observation to string regardless of whether the API returned a string or object
+function obsToStr(obs: unknown): string {
+  if (!obs) return '';
+  if (typeof obs === 'string') return obs;
+  if (typeof obs === 'object') return JSON.stringify(obs);
+  return String(obs);
+}
+
 function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
+  // Structure-based detection: any observation whose value contains an array of bare ISO date
+  // strings (YYYY-MM-DD with no time component) is an availability calendar.
+  // Requires 5+ unique dates to distinguish from time-slot responses (which have datetimes).
   for (const t of thoughts) {
-    if (t.observation && (t.observation.includes('card_widget') || t.observation.includes('"template"'))) {
-      const cw = extractCardFromObservation(t.observation);
+    const obs = obsToStr(t.observation);
+    if (!obs) continue;
+    // Match bare dates only — \d{4}-\d{2}-\d{2} NOT followed by T or another digit
+    const bareMatches = [...obs.matchAll(/(\d{4}-\d{2}-\d{2})(?![T\d])/g)];
+    const uniqueDates = [...new Set(bareMatches.map(m => m[1]))];
+    if (uniqueDates.length >= 5) {
+      return { template: 'card_widget', type: 'availability_calendar', payload: { dates: uniqueDates } };
+    }
+  }
+  for (const t of thoughts) {
+    const obs = obsToStr(t.observation);
+    if (obs && (obs.includes('card_widget') || obs.includes('"template"'))) {
+      const cw = extractCardFromObservation(obs);
       if (cw) return cw;
     }
   }
   for (const t of thoughts) {
-    if (t.observation) {
-      const parsed = safeParse(t.observation);
+    const obs = obsToStr(t.observation);
+    if (obs) {
+      const parsed = safeParse(obs);
       if (parsed.ok) {
         const data = deepUnwrap(parsed.data);
         const slotResult = findInData<TimeSlot>(data, isTimeSlotArray, ['available_slots', 'slots']);
@@ -346,8 +370,9 @@ function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
     }
   }
   for (const t of thoughts) {
-    if (t.observation) {
-      const cw = extractCardFromObservation(t.observation);
+    const obs = obsToStr(t.observation);
+    if (obs) {
+      const cw = extractCardFromObservation(obs);
       if (cw) return cw;
     }
   }
@@ -359,13 +384,13 @@ function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
 function looksLikeAboutCompany(text: string): boolean {
   const lower = text.toLowerCase();
   const keywords = ['company', 'founded', 'ceo', 'founder', 'headquarters', 'about us',
-    'our mission', 'established', 'associates', 'consulting', 'framework', 'advisory',
+    'our mission', 'established', 'framework', 'advisory',
     'chief executive', 'managing director', 'our team', 'our approach', 'president', 'specialize'];
   let matches = 0;
   for (const kw of keywords) {
     if (lower.includes(kw)) matches++;
   }
-  return matches >= 3;
+  return matches >= 4;
 }
 
 function extractImageUrlFromText(text: string): string | undefined {
@@ -551,10 +576,34 @@ function tryParseCompanyProfile(text: string): CardWidget | null {
   return null;
 }
 
+// Used when loading stored Dify messages — no text-based fallback to avoid false profile cards
+function extractCardFromStoredAnswer(content: string): CardWidget | null {
+  if (!content || typeof content !== 'string') return null;
+  const profileCard = tryParseCompanyProfile(content);
+  if (profileCard) return profileCard;
+  if (content.includes('{')) {
+    const jsonBlocks = content.match(/```json\s*([\s\S]*?)```/g);
+    if (jsonBlocks) {
+      for (const block of jsonBlocks) {
+        const json = block.replace(/```json\s*/, '').replace(/```$/, '').trim();
+        const cw = extractCardFromObservation(json);
+        if (cw) return cw;
+      }
+    }
+    const braceStart = content.indexOf('{');
+    const braceEnd = content.lastIndexOf('}');
+    if (braceStart >= 0 && braceEnd > braceStart) {
+      const json = content.slice(braceStart, braceEnd + 1);
+      const cw = extractCardFromObservation(json);
+      if (cw) return cw;
+    }
+  }
+  return null;
+}
+
+
 function extractCardFromContent(content: string): CardWidget | null {
   if (!content || typeof content !== 'string') return null;
-
-  console.log('[ChatCard] extractCardFromContent called, length:', content.length, 'preview:', content.substring(0, 120));
 
   // Try company profile extraction first (handles arrays, objects, surrounding text)
   const profileCard = tryParseCompanyProfile(content);
@@ -639,7 +688,6 @@ function resolveIcon(hint: string | undefined, index: number): LucideIcon {
 const FlipCard = ({ icon, title, description, index, onLearnMore }: {
   icon?: string; title: string; description: string; index: number; onLearnMore: () => void;
 }) => {
-  const [flipped, setFlipped] = useState(false);
   const [visible, setVisible] = useState(false);
   const IconComponent = resolveIcon(icon || title, index);
 
@@ -651,7 +699,6 @@ const FlipCard = ({ icon, title, description, index, onLearnMore }: {
   return (
     <div
       style={{
-        perspective: '1200px',
         fontFamily: CARD_FONT,
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0)' : 'translateY(12px)',
@@ -660,42 +707,27 @@ const FlipCard = ({ icon, title, description, index, onLearnMore }: {
       }}
     >
       <div
-        className="relative w-full cursor-pointer"
-        style={{
-          transformStyle: 'preserve-3d',
-          transition: 'transform 0.6s ease',
-          transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-          height: '380px',
-        }}
-        onClick={() => setFlipped(f => !f)}
+        className="flex flex-col justify-between rounded-2xl border border-white bg-white/30 backdrop-blur-sm"
+        style={{ padding: '28px', height: '340px' }}
       >
-        <div
-          className="absolute inset-0 flex flex-col items-start justify-start rounded-2xl border border-white"
-          style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', padding: '36px' }}
-        >
-          <div className="flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm" style={{ width: '64px', height: '64px', marginBottom: '32px' }}>
-            <IconComponent size={30} className="text-[#af71f1]" strokeWidth={1.6} />
+        <div>
+          <div className="flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm" style={{ width: '56px', height: '56px', marginBottom: '20px' }}>
+            <IconComponent size={26} className="text-[#af71f1]" strokeWidth={1.6} />
           </div>
-          <h4 className="font-semibold text-[#1a1a2e]" style={{ fontSize: '1.2rem', lineHeight: 1.4, letterSpacing: '-0.01em' }}>
+          <h4 className="font-semibold text-[#1a1a2e]" style={{ fontSize: '1.05rem', lineHeight: 1.4, letterSpacing: '-0.01em', marginBottom: '10px' }}>
             {title}
           </h4>
-        </div>
-
-        <div
-          className="absolute inset-0 flex flex-col justify-between rounded-2xl bg-white/50 backdrop-blur-md border border-white"
-          style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', padding: '36px' }}
-        >
-          <p className="text-[#3a3a4a]" style={{ fontSize: '0.95rem', lineHeight: 1.75 }}>
+          <p className="text-[#3a3a4a]" style={{ fontSize: '0.88rem', lineHeight: 1.7 }}>
             {description}
           </p>
-          <button
-            onClick={(e) => { e.stopPropagation(); onLearnMore(); }}
-            className="self-start inline-flex items-center gap-1.5 font-medium text-[#af71f1] border border-[#af71f1]/40 rounded-full hover:bg-[#af71f1] hover:text-white transition-colors duration-200"
-            style={{ marginTop: '24px', padding: '10px 26px', fontSize: '0.9rem', flexShrink: 0 }}
-          >
-            Learn More
-          </button>
         </div>
+        <button
+          onClick={onLearnMore}
+          className="self-start inline-flex items-center gap-1.5 font-medium text-[#af71f1] border border-[#af71f1]/40 rounded-full hover:bg-[#af71f1] hover:text-white transition-colors duration-200"
+          style={{ marginTop: '20px', padding: '8px 22px', fontSize: '0.85rem' }}
+        >
+          Learn More
+        </button>
       </div>
     </div>
   );
@@ -719,9 +751,21 @@ const ProcessCardGrid = ({ steps, onSend }: { steps: ProcessItem[]; onSend: (msg
 
 const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; date?: string }; onSend: (msg: string) => void }) => {
   const [selected, setSelected] = useState<number | null>(null);
+  const [email, setEmail] = useState(() => localStorage.getItem('hyun-user-email') || '');
+  const [emailError, setEmailError] = useState('');
+  const [booking, setBooking] = useState(false);
+  const [booked, setBooked] = useState(false);
+  const [bookingError, setBookingError] = useState('');
+
+  // Filter out slots that have already passed in PST
+  // slot.start is "YYYY-MM-DDTHH:MM:SS" (PST); compare as string against PST now
+  const futureSlots = useMemo(() => {
+    const nowPST = new Date().toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }); // "YYYY-MM-DD HH:MM:SS"
+    return payload.slots.filter(s => !s.start || s.start.replace('T', ' ') > nowPST);
+  }, [payload.slots]);
 
   const fmtISOTime = (iso: string) => {
-    try { const d = new Date(iso); return isNaN(d.getTime()) ? iso : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }); }
+    try { const d = new Date(iso); return isNaN(d.getTime()) ? iso : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' }); }
     catch { return iso; }
   };
   const fmtSlot = (s: TimeSlot) => {
@@ -729,14 +773,74 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
     if (s.end) return `${fmtISOTime(s.start)} - ${fmtISOTime(s.end)}`;
     return fmtISOTime(s.start);
   };
+  // Extract HH:MM in 24h from ISO datetime string
+  const toHHMM = (iso: string) => {
+    const t = (iso || '').split('T')[1];
+    return t ? t.substring(0, 5) : '';
+  };
   const dateLabel = (() => {
     const src = payload.date || payload.slots[0]?.start;
     if (!src) return 'Available Slots';
-    try { const d = new Date(src); return isNaN(d.getTime()) ? 'Available Slots' : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }); }
+    try { const d = new Date(src + (src.includes('T') ? '' : 'T00:00:00')); return isNaN(d.getTime()) ? 'Available Slots' : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' }); }
     catch { return 'Available Slots'; }
   })();
 
+  const handleConfirm = async () => {
+    if (selected === null) return;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError('Please enter a valid email address'); return;
+    }
+    setEmailError(''); setBookingError(''); setBooking(true);
+    try {
+      const slot = futureSlots[selected];
+      const date = (slot.start || payload.date || '').split('T')[0];
+      const startTime = toHHMM(slot.start || '');
+      const endTime = toHHMM(slot.end || '');
+      const userId = localStorage.getItem('hyun-user-id') || 'guest';
+      localStorage.setItem('hyun-user-email', email);
+
+      const res = await fetch('/workflow-book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: { date, start_time: startTime, end_time: endTime, user_email_id: email },
+          response_mode: 'blocking',
+          user: userId,
+        }),
+      });
+      if (!res.ok) throw new Error('Booking failed');
+      setBooked(true);
+      onSend(`I've booked the ${fmtSlot(slot)} slot on ${dateLabel}. Confirmation will be sent to ${email}`);
+    } catch {
+      setBookingError('Booking failed. Please try again.');
+    } finally {
+      setBooking(false);
+    }
+  };
+
   if (!payload.slots || payload.slots.length === 0) return null;
+  if (futureSlots.length === 0) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="my-2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm text-center">
+        <p className="text-sm text-gray-500">No upcoming slots available for <span className="font-medium text-gray-700">{dateLabel}</span>. Please select a different date.</p>
+        <button onClick={() => onSend('I would like to select a different date')} className="mt-3 text-sm text-[#af71f1] underline hover:text-[#9c5ee0]">Select Different Date</button>
+      </motion.div>
+    );
+  }
+
+  if (booked) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+        className="my-2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm text-center"
+      >
+        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h3 className="font-semibold text-gray-900 mb-1">Booking Confirmed!</h3>
+        <p className="text-sm text-gray-500">A confirmation will be sent to <span className="font-medium text-gray-700">{email}</span></p>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="my-2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
@@ -744,12 +848,12 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
         Available Slots for <span className="text-[#af71f1]">{dateLabel}</span>
       </h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {payload.slots.map((slot, idx) => {
+        {futureSlots.map((slot, idx) => {
           const label = fmtSlot(slot);
           const isSelected = selected === idx;
           return (
             <button
-              key={idx} onClick={() => setSelected(idx)}
+              key={idx} onClick={() => { setSelected(idx); setBookingError(''); }}
               className={['flex items-center justify-center gap-1 sm:gap-1.5 rounded-full border px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-all', isSelected ? 'border-[#af71f1] bg-[#af71f1] text-white shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-[#af71f1] hover:text-[#af71f1]'].join(' ')}
             >
               <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />{label}
@@ -757,18 +861,51 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
           );
         })}
       </div>
-      <div className="mt-4 sm:mt-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-        <button
-          onClick={() => { if (selected !== null) onSend(`I'd like to book the ${fmtSlot(payload.slots[selected])} slot`); }}
-          disabled={selected === null}
-          className={['rounded-full px-5 sm:px-6 py-2 text-sm font-semibold uppercase tracking-wide transition-all', selected !== null ? 'bg-[#af71f1] text-white hover:bg-[#9c5ee0]' : 'cursor-not-allowed bg-gray-100 text-gray-400'].join(' ')}
-        >
-          Confirm
-        </button>
-        <button onClick={() => onSend('I would like to select a different date')} className="text-sm text-gray-500 underline hover:text-[#af71f1]">
-          Select Different Date
-        </button>
-      </div>
+
+      {/* Email input — shown once a slot is selected */}
+      <AnimatePresence>
+        {selected !== null && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="mt-4 space-y-3 overflow-hidden"
+          >
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Your email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setEmailError(''); }}
+                placeholder="you@example.com"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#af71f1]/40 focus:border-[#af71f1] transition-all"
+              />
+              {emailError && <p className="text-xs text-red-500 mt-1">{emailError}</p>}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleConfirm}
+                disabled={booking || !email}
+                className={['rounded-full px-5 py-2 text-sm font-semibold uppercase tracking-wide transition-all flex items-center gap-2',
+                  !booking && email ? 'bg-[#af71f1] text-white hover:bg-[#9c5ee0]' : 'cursor-not-allowed bg-gray-100 text-gray-400'
+                ].join(' ')}
+              >
+                {booking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Confirm
+              </button>
+              <button onClick={() => onSend('I would like to select a different date')} className="text-sm text-gray-500 underline hover:text-[#af71f1]">
+                Select Different Date
+              </button>
+            </div>
+            {bookingError && <p className="text-xs text-red-500">{bookingError}</p>}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {selected === null && (
+        <div className="mt-4">
+          <button onClick={() => onSend('I would like to select a different date')} className="text-sm text-gray-500 underline hover:text-[#af71f1]">
+            Select Different Date
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 };
@@ -915,7 +1052,143 @@ const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSe
   );
 };
 
-const RenderCardWidget = ({ widget, onSend }: { widget: CardWidget; onSend: (msg: string) => void }) => {
+const AvailabilityCalendarCard = ({
+  payload, onSend, onPushCard,
+}: {
+  payload: { dates: string[] };
+  onSend: (msg: string) => void;
+  onPushCard: (card: CardWidget) => void;
+}) => {
+  const availableDates = useMemo(() => new Set((payload.dates || []).map(d => d.split('T')[0])), [payload.dates]);
+
+  const firstAvailable = useMemo(() => {
+    const d = payload.dates[0];
+    return d ? new Date(d.split('T')[0] + 'T00:00:00') : new Date();
+  }, [payload.dates]);
+
+  const [viewYear, setViewYear] = useState(firstAvailable.getFullYear());
+  const [viewMonth, setViewMonth] = useState(firstAvailable.getMonth());
+  const [loadingDate, setLoadingDate] = useState<string | null>(null);
+
+  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
+
+  const monthName = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'America/Los_Angeles' });
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const handleDateClick = async (iso: string) => {
+    if (loadingDate) return;
+    setLoadingDate(iso);
+    try {
+      const userId = localStorage.getItem('hyun-user-id') || 'guest';
+      const res = await fetch('/workflow-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: { date: iso }, response_mode: 'blocking', user: userId }),
+      });
+      const data = await res.json();
+      const outputs = data.data?.outputs ?? data.outputs ?? {};
+      // outputs values may be JSON-encoded arrays — unwrap all candidates
+      let slots: TimeSlot[] = [];
+      for (const v of Object.values(outputs)) {
+        const candidate = Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return null; } })() : null);
+        if (Array.isArray(candidate) && candidate.length > 0 && candidate[0]?.start) {
+          slots = candidate as TimeSlot[];
+          break;
+        }
+      }
+      onPushCard({ template: 'card_widget', type: 'time_slot_grid', payload: { slots, date: iso } });
+    } catch { /* silently ignore */ } finally {
+      setLoadingDate(null);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      className="my-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm w-full"
+      style={{ maxWidth: 580 }}
+    >
+      <div className="flex">
+        {/* ── Left panel: profile info ── */}
+        <div className="flex flex-col gap-3 px-6 py-6 border-r border-gray-100" style={{ width: 190, flexShrink: 0 }}>
+          <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e8d5ff]">
+            <img src="https://hyunandassociatesllc.com/assets/hyunperson-DiWXyhXY.jpg" alt="Hyun Suh" className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 font-medium">Hyun Suh</p>
+            <h4 className="font-bold text-gray-900 text-sm leading-snug mt-0.5">Consultation</h4>
+          </div>
+          <div className="space-y-2 mt-1">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              45 min
+            </div>
+            <div className="flex items-start gap-2 text-xs text-gray-500">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              <span>Web conferencing details provided upon confirmation.</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right panel: calendar ── */}
+        <div className="flex-1 min-w-0 px-5 py-6">
+          <h3 className="font-semibold text-gray-900 text-sm mb-4">Select a Date</h3>
+          {/* Month navigation */}
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <span className="text-sm font-semibold text-gray-800">{monthName}</span>
+            <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+          {/* Day labels */}
+          <div className="grid grid-cols-7 mb-1">
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+              <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">{d}</div>
+            ))}
+          </div>
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7 gap-y-1">
+            {cells.map((day, idx) => {
+              if (!day) return <div key={idx} />;
+              const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const isAvailable = availableDates.has(iso);
+              const isLoading = loadingDate === iso;
+              const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+              const isPast = iso < todayStr;
+              const isClickable = isAvailable && !isPast;
+              return (
+                <button key={idx} disabled={!isClickable || !!loadingDate} onClick={() => handleDateClick(iso)}
+                  className={['mx-auto w-8 h-8 rounded-full text-xs font-medium transition-all flex items-center justify-center',
+                    isLoading ? 'bg-[#af71f1] text-white' :
+                    isClickable ? 'bg-[#f0e6ff] text-[#7c3aed] hover:bg-[#af71f1] hover:text-white cursor-pointer font-semibold' :
+                    isPast ? 'text-gray-200 cursor-default line-through' :
+                    'text-gray-300 cursor-default'
+                  ].join(' ')}
+                >
+                  {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const RenderCardWidget = ({
+  widget, onSend, onPushCard,
+}: {
+  widget: CardWidget;
+  onSend: (msg: string) => void;
+  onPushCard: (card: CardWidget) => void;
+}) => {
   const { type, payload, labels } = widget;
   switch (type) {
     case 'service_grid': {
@@ -942,6 +1215,8 @@ const RenderCardWidget = ({ widget, onSend }: { widget: CardWidget; onSend: (msg
       return <TimeSlotCardView payload={payload as { slots: TimeSlot[]; date?: string }} onSend={onSend} />;
     case 'about_company':
       return <AboutCompanyCard payload={payload as AboutCompanyItem} onSend={onSend} />;
+    case 'availability_calendar':
+      return <AvailabilityCalendarCard payload={payload as { dates: string[] }} onSend={onSend} onPushCard={onPushCard} />;
     default:
       return null;
   }
@@ -949,38 +1224,39 @@ const RenderCardWidget = ({ widget, onSend }: { widget: CardWidget; onSend: (msg
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-interface ChatInterfaceProps { isOpen: boolean; onClose: () => void }
+interface ChatInterfaceProps { isOpen: boolean; onClose: () => void; onChatActive?: () => void }
 
-const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
+const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) => {
   const [message, setMessage] = useState("");
-  const [chat, setChat] = useState<ChatMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('hyun-chat-history');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [streamedText, setStreamedText] = useState("");
-  const [conversationId, setConversationId] = useState(() => {
-    if (typeof window !== 'undefined') return sessionStorage.getItem('hyun-conversation-id') || "";
-    return "";
-  });
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('hyun-chat-history');
-      return !saved || JSON.parse(saved).length === 0;
-    }
-    return true;
-  });
+  const [conversationId, setConversationId] = useState("");
+  const [showWelcome, setShowWelcome] = useState(() => window.location.hash !== '#chat');
   const [error, setError] = useState("");
   const [pendingCardWidget, setPendingCardWidget] = useState<CardWidget | null>(null);
+  const [introPhase, setIntroPhase] = useState<'big' | 'shrinking' | 'done'>(window.location.hash === '#chat' ? 'done' : 'big');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
   const chatClientRef = useRef<XpectrumChat | null>(null);
   const conversationIdRef = useRef(conversationId);
+
+  const pushCard = useCallback((card: CardWidget) => {
+    setChat(prev => {
+      // For time_slot_grid: replace the last existing one so clicking dates doesn't stack cards
+      if (card.type === 'time_slot_grid') {
+        const lastIdx = prev.map(m => m.cardWidget?.type).lastIndexOf('time_slot_grid');
+        if (lastIdx !== -1) {
+          const updated = [...prev];
+          updated[lastIdx] = { role: 'bot', text: '', cardWidget: card };
+          return updated;
+        }
+      }
+      return [...prev, { role: 'bot', text: '', cardWidget: card }];
+    });
+  }, []);
 
   // Expanded Scroll Tolerance (150px)
   const handleChatScroll = useCallback(() => {
@@ -990,12 +1266,17 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     userScrolledUpRef.current = !atBottom;
   }, []);
 
-  const getUserIdentifier = () => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    ctx?.fillText('fp', 10, 10);
-    return btoa(navigator.userAgent + screen.width + Intl.DateTimeFormat().resolvedOptions().timeZone + canvas.toDataURL().slice(-20)).slice(0, 32);
+  const getOrCreateUserId = (): string => {
+    const key = 'hyun-user-id';
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(key, id);
+    }
+    return id;
   };
+
+  const CONV_KEY = 'hyun-conversation-id';
 
   // ── XpectrumChat client initialization ──────────────────────────
   useEffect(() => {
@@ -1006,22 +1287,18 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     chatClientRef.current = new XpectrumChat({
       baseUrl,
       apiKey,
-      user: getUserIdentifier(),
+      user: getOrCreateUserId(),
     });
     return () => { chatClientRef.current?.destroy(); };
   }, []);
 
-  // Keep conversationIdRef in sync with state
+  // Keep conversationIdRef in sync with state and persist to localStorage
   useEffect(() => {
     conversationIdRef.current = conversationId;
+    if (conversationId) {
+      localStorage.setItem(CONV_KEY, conversationId);
+    }
   }, [conversationId]);
-
-  const suggestedQuestions = [
-    "What services do you offer?",
-    "Tell me about the company",
-    "How do I schedule a consultation?",
-    "What makes you different?"
-  ];
 
   // ── Voice Input (Web Speech API) ──────────────────────────────
   const [isListening, setIsListening] = useState(false);
@@ -1193,15 +1470,6 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     if (!isOpen && voiceCallActive) endVoiceCall();
   }, [isOpen, voiceCallActive, endVoiceCall]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && chat.length > 0)
-      sessionStorage.setItem('hyun-chat-history', JSON.stringify(chat));
-  }, [chat]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && conversationId)
-      sessionStorage.setItem('hyun-conversation-id', conversationId);
-  }, [conversationId]);
 
   // Updated Scroll Behavior ('auto' stops browser from fighting manual scrolls)
   const scrollToBottom = useCallback(() => {
@@ -1215,7 +1483,9 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
   useEffect(() => {
     if (chat.length > 0) {
       userScrolledUpRef.current = false;
-      setTimeout(() => chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: 'smooth' }), 100);
+      // Use longer delay on initial history load (cards need time to render)
+      const delay = chat.length > 2 ? 400 : 100;
+      setTimeout(() => chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: 'auto' }), delay);
     }
   }, [chat.length]);
 
@@ -1228,11 +1498,75 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
       document.body.classList.add('overflow-hidden');
     } else {
       document.body.classList.remove('overflow-hidden');
-      setShowWelcome(true); setMessage(""); setChat([]); setStreamedText(""); setIsLoading(false); setError("");
-      setPendingCardWidget(null); setConversationId("");
-      if (typeof window !== 'undefined') { sessionStorage.removeItem('hyun-chat-history'); sessionStorage.removeItem('hyun-conversation-id'); }
+      setMessage(""); setStreamedText(""); setIsLoading(false); setError("");
+      setPendingCardWidget(null);
     }
     return () => { document.body.classList.remove('overflow-hidden'); };
+  }, [isOpen]);
+
+  // On open: show welcome at /, load conversation from Dify at #chat
+  useEffect(() => {
+    if (!isOpen) return;
+    const client = chatClientRef.current;
+
+    let t1: ReturnType<typeof setTimeout>;
+    let t2: ReturnType<typeof setTimeout>;
+
+    const showIntro = () => {
+      setChat([]);
+      setShowWelcome(true);
+      setIntroPhase('big');
+      t1 = setTimeout(() => setIntroPhase('shrinking'), 800);
+      t2 = setTimeout(() => setIntroPhase('done'), 1500);
+    };
+
+    const savedConvId = localStorage.getItem(CONV_KEY);
+
+    // Welcome screen only when there's no existing conversation AND not already in #chat
+    if (window.location.hash !== '#chat') {
+      if (!savedConvId) {
+        showIntro();
+        return () => { clearTimeout(t1); clearTimeout(t2); };
+      }
+      // Has existing conversation — skip welcome and resume directly
+      window.history.replaceState(null, '', '#chat');
+    }
+
+    // At #chat (or promoted to #chat): stay in chat mode
+    setShowWelcome(false);
+
+    if (!savedConvId || !client) {
+      setChat([]);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+
+    setConversationId(savedConvId);
+    conversationIdRef.current = savedConvId;
+
+    client.getMessages(savedConvId, { limit: 50 })
+      .then((msgRes) => {
+        if (msgRes.data.length === 0) { setChat([]); return; }
+        const chatMessages: ChatMessage[] = [...msgRes.data].flatMap(msg => {
+          const items: ChatMessage[] = [{ role: 'user', text: msg.query }];
+          if (msg.answer) {
+            // Reconstruct card from agent_thoughts — same data the SDK streams via onThought
+            const thoughts: AgentThought[] = (msg.agent_thoughts || []).map((t: any) => ({
+              id: t.id || '',
+              thought: t.thought || '',
+              observation: obsToStr(t.observation),
+              tool: t.tool || '',
+              tool_input: t.tool_input || '',
+            }));
+            const cardWidget = extractCardFromThoughts(thoughts) ?? extractCardFromStoredAnswer(msg.answer) ?? undefined;
+            items.push({ role: 'bot', text: stripJson(msg.answer), cardWidget });
+          }
+          return items;
+        });
+        setChat(chatMessages);
+      })
+      .catch(() => setChat([]));
+
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isOpen]);
 
   const handleSend = async (eOrMsg?: string | React.MouseEvent | React.FormEvent) => {
@@ -1249,6 +1583,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     setMessage(""); setIsLoading(true); setStreamedText(""); setError(""); setShowWelcome(false);
     setPendingCardWidget(null);
     userScrolledUpRef.current = false;
+    onChatActive?.();
 
     const agentThoughts: AgentThought[] = [];
     let fullText = '';
@@ -1261,7 +1596,10 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
 
         onMessage: (accumulatedText: string, _messageId: string, newConversationId: string) => {
           fullText = accumulatedText;
-          if (newConversationId) setConversationId(newConversationId);
+          if (newConversationId) {
+            setConversationId(newConversationId);
+            localStorage.setItem(CONV_KEY, newConversationId);
+          }
           setStreamedText(accumulatedText);
 
           // Try to extract card from accumulated text as soon as JSON is parseable
@@ -1287,6 +1625,8 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
               ...agentThoughts[existingIdx], ...mapped,
               observation: mapped.observation || agentThoughts[existingIdx].observation,
               thought: mapped.thought || agentThoughts[existingIdx].thought,
+              tool: mapped.tool || agentThoughts[existingIdx].tool,
+              tool_input: mapped.tool_input || agentThoughts[existingIdx].tool_input,
             };
           } else {
             agentThoughts.push(mapped);
@@ -1299,20 +1639,82 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
           }
         },
 
-        onMessageEnd: () => {
-          console.log('[ChatDebug] message_end. fullText preview:', fullText.substring(0, 200), 'extractedCard:', extractedCard?.type);
+        onMessageEnd: (meta) => {
+          if (meta.conversation_id) {
+            setConversationId(meta.conversation_id);
+            localStorage.setItem(CONV_KEY, meta.conversation_id);
+          }
+          // Retry from thoughts (in case observations arrived after onThought fired)
+          if (!extractedCard) extractedCard = extractCardFromThoughts(agentThoughts);
           if (!extractedCard && fullText) extractedCard = extractCardFromContent(fullText);
 
           if (!messageAdded) {
             setChat(prev => [...prev, {
               role: 'bot',
-              text: extractedCard ? '' : stripJson(fullText),
+              text: stripJson(fullText),
               cardWidget: extractedCard,
             }]);
             messageAdded = true;
           }
           setStreamedText('');
           setPendingCardWidget(null);
+
+          // Post-stream fetch: get stored message with full agent_thought observations
+          // (Dify streams thoughts without observations; observations only in stored messages)
+          // Always run — content-based extraction may have false-positives; stored observations win.
+          if (meta.message_id && chatClientRef.current) {
+            const convId = meta.conversation_id || conversationIdRef.current;
+            const targetMsgId = meta.message_id;
+            if (convId && chatClientRef.current) {
+              const tryFetch = (client: typeof chatClientRef.current) =>
+                client!.getMessages(convId, { limit: 50 })
+                  .then(res => {
+                    if (!res.data.length) return;
+                    // Find by ID first, fall back to last message
+                    const storedMsg = res.data.find((m: any) => m.id === targetMsgId)
+                                   ?? res.data[res.data.length - 1];
+                    const thoughts: AgentThought[] = (storedMsg.agent_thoughts || []).map((t: any) => ({
+                      id: t.id || '', thought: t.thought || '', observation: obsToStr(t.observation),
+                      tool: t.tool || '', tool_input: t.tool_input || '',
+                    }));
+                    const card = extractCardFromThoughts(thoughts);
+                    if (card) {
+                      setChat(prev => {
+                        const updated = [...prev];
+                        for (let i = updated.length - 1; i >= 0; i--) {
+                          if (updated[i].role === 'bot') {
+                            updated[i] = { ...updated[i], cardWidget: card };
+                            break;
+                          }
+                        }
+                        return updated;
+                      });
+                    }
+                  })
+                  .catch(() => {});
+              // Give Dify 800ms to commit the message before fetching
+              setTimeout(() => tryFetch(chatClientRef.current), 800);
+            }
+          }
+
+          if (meta?.message_id && chatClientRef.current) {
+            chatClientRef.current.getSuggestedQuestions(meta.message_id)
+              .then(questions => {
+                if (questions && questions.length > 0) {
+                  setChat(prev => {
+                    const updated = [...prev];
+                    for (let i = updated.length - 1; i >= 0; i--) {
+                      if (updated[i].role === 'bot') {
+                        updated[i] = { ...updated[i], suggestions: questions };
+                        break;
+                      }
+                    }
+                    return updated;
+                  });
+                }
+              })
+              .catch(() => {});
+          }
         },
 
         onError: (err) => {
@@ -1322,10 +1724,11 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
         onCompleted: () => {
           // Fallback: if stream ended without message_end event
           if (fullText.trim() && !messageAdded) {
+            if (!extractedCard) extractedCard = extractCardFromThoughts(agentThoughts);
             if (!extractedCard && fullText) extractedCard = extractCardFromContent(fullText);
             setChat(prev => [...prev, {
               role: 'bot',
-              text: extractedCard ? '' : stripJson(fullText),
+              text: stripJson(fullText),
               cardWidget: extractedCard,
             }]);
             setStreamedText('');
@@ -1342,7 +1745,6 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
       // Retry with fresh conversation if 404 (stale conversation)
       if (err?.status === 404 && conversationIdRef.current) {
         setConversationId("");
-        if (typeof window !== 'undefined') sessionStorage.removeItem('hyun-conversation-id');
         try {
           await doSend("");
         } catch (retryErr: any) {
@@ -1359,9 +1761,21 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
     }
   };
 
+  const handleReset = useCallback(() => {
+    setChat([]);
+    setShowWelcome(true);
+    setIntroPhase('done');
+    setConversationId("");
+    conversationIdRef.current = "";
+    localStorage.removeItem(CONV_KEY);
+    setStreamedText("");
+    setError("");
+    setPendingCardWidget(null);
+    window.history.replaceState(null, '', '/');
+  }, []);
+
   const sendMessage = useCallback((msg: string) => { handleSend(msg); }, [conversationId]);
   const handleKeyPress = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
-  const handleSuggestionClick = (q: string) => { setMessage(q); setShowWelcome(false); setTimeout(() => handleSend(q), 100); };
 
   // Auto-send after voice recognition finishes
   useEffect(() => {
@@ -1419,84 +1833,119 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
             <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
               className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50 text-black hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center transition-all"
+              title="Go to home"
             >
-              <X className="w-5 h-5" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
             </button>
 
             {showWelcome ? (
               <div className="flex flex-col items-center justify-center h-full relative z-10 px-4 sm:px-6">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-center max-w-6xl w-full">
+                <div className="text-center max-w-6xl w-full">
                   <div className="flex flex-col items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
-                    <AnimatedLogo isWelcome={true} />
+                    <motion.img
+                      src={haLogo}
+                      alt="Hyun and Associates Logo"
+                      className="object-contain"
+                      layoutId="ha-logo"
+                      initial={{ scale: 2.8, y: '20vh', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.15))' }}
+                      animate={
+                        introPhase === 'big'
+                          ? { scale: 2.8, y: '20vh', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.15))' }
+                          : { scale: 1, y: 0, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))' }
+                      }
+                      transition={
+                        introPhase === 'shrinking'
+                          ? { type: 'spring', stiffness: 280, damping: 22, mass: 0.9 }
+                          : { duration: 0 }
+                      }
+                      style={{ width: 128, height: 128 }}
+                    />
                   </div>
-                  <h1 className="font-normal text-black text-2xl sm:text-3xl md:text-5xl lg:text-6xl text-center leading-tight mb-4 sm:mb-6">
-                    Welcome to<br />Hyun & Associates
-                  </h1>
-                  <p className="font-normal text-black text-base sm:text-lg md:text-2xl text-center leading-relaxed mb-6 sm:mb-8 md:mb-12 px-2">
-                    <span className="font-semibold">where we let innovative technologies work for you. </span>
-                    <span className="font-bold italic">How can I help you today?</span>
-                  </p>
-                  <div className="flex flex-col w-full items-center gap-4 sm:gap-6">
-                    <form onSubmit={handleSend} className="relative w-full max-w-3xl">
-                      <div className="relative flex items-center bg-white/90 backdrop-blur-sm rounded-full border border-gray-200 shadow-lg">
-                        <input
-                          type="text" value={message} onChange={(e) => setMessage(e.target.value)}
-                          placeholder={isListening ? "Listening..." : "Type your message here..."}
-                          className="flex-1 px-4 sm:px-6 py-3 sm:py-4 pr-24 sm:pr-28 bg-transparent text-black text-base sm:text-lg placeholder-gray-400 focus:outline-none rounded-full"
-                        />
-                        <div className="absolute right-2 flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={startListening}
-                            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
-                              isListening
-                                ? 'bg-red-500 hover:bg-red-600 voice-pulse'
-                                : 'bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]'
-                            }`}
-                          >
-                            <Mic className={`w-4 h-4 sm:w-5 sm:h-5 ${isListening ? 'text-white' : ''}`} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
-                            disabled={voiceCallConnecting}
-                            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
-                              voiceCallActive
-                                ? 'bg-red-500 hover:bg-red-600 voice-pulse'
-                                : voiceCallConnecting
-                                  ? 'bg-amber-400 animate-pulse'
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: introPhase === 'done' ? 1 : 0, y: introPhase === 'done' ? 0 : 16 }}
+                    transition={{ duration: 0.5 }}
+                    style={{ pointerEvents: introPhase === 'done' ? 'auto' : 'none' }}
+                  >
+                    <h1 className="font-normal text-black text-2xl sm:text-3xl md:text-5xl lg:text-6xl text-center leading-tight mb-4 sm:mb-6">
+                      Welcome to<br />Hyun & Associates
+                    </h1>
+                    <p className="font-normal text-black text-base sm:text-lg md:text-2xl text-center leading-relaxed mb-6 sm:mb-8 md:mb-12 px-2">
+                      <span className="font-semibold">where we let innovative technologies work for you. </span>
+                      <span className="font-bold italic">How can I help you today?</span>
+                    </p>
+                    <div className="flex flex-col w-full items-center gap-4 sm:gap-6">
+                      <form onSubmit={handleSend} className="relative w-full max-w-3xl">
+                        <div className="relative flex items-center bg-white/90 backdrop-blur-sm rounded-full border border-gray-200 shadow-lg">
+                          <input
+                            type="text" value={message} onChange={(e) => setMessage(e.target.value)}
+                            placeholder={isListening ? "Listening..." : "Type your message here..."}
+                            className="flex-1 px-4 sm:px-6 py-3 sm:py-4 pr-24 sm:pr-28 bg-transparent text-black text-base sm:text-lg placeholder-gray-400 focus:outline-none rounded-full"
+                          />
+                          <div className="absolute right-2 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={startListening}
+                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
+                                isListening
+                                  ? 'bg-red-500 hover:bg-red-600 voice-pulse'
                                   : 'bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]'
-                            } disabled:opacity-50`}
-                          >
-                            {voiceCallActive ? <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Phone className={`w-4 h-4 sm:w-5 sm:h-5 ${voiceCallConnecting ? 'text-white' : ''}`} />}
-                          </button>
-                          <button type="submit" className="w-9 h-9 sm:w-10 sm:h-10 bg-[#af71f1] rounded-full flex items-center justify-center hover:bg-[#9c5ee0] transition-colors">
-                            <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                          </button>
+                              }`}
+                            >
+                              <Mic className={`w-4 h-4 sm:w-5 sm:h-5 ${isListening ? 'text-white' : ''}`} />
+                            </button>
+                            <button type="submit" className="w-9 h-9 sm:w-10 sm:h-10 bg-[#af71f1] rounded-full flex items-center justify-center hover:bg-[#9c5ee0] transition-colors">
+                              <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                            </button>
+                          </div>
                         </div>
+                      </form>
+                      <div className="flex flex-wrap justify-center gap-2 sm:gap-3 px-2">
+                        {[
+                          "What services do you offer?",
+                          "How can AI help my business?",
+                          "Book a consultation",
+                          "Tell me about your process",
+                        ].map((q) => (
+                          <button
+                            key={q}
+                            onClick={() => sendMessage(q)}
+                            className="px-4 py-2 text-sm rounded-full border border-gray-300 bg-white/70 backdrop-blur-sm text-gray-600 hover:border-[#af71f1] hover:text-[#af71f1] hover:bg-white/90 transition-all duration-200 shadow-sm"
+                          >
+                            {q}
+                          </button>
+                        ))}
                       </div>
-                    </form>
-                    <div className="flex flex-wrap justify-center items-center gap-2 sm:gap-3 w-full max-w-4xl px-2">
-                      {suggestedQuestions.map((q, i) => (
-                        <button key={i} onClick={() => handleSuggestionClick(q)}
-                          className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors text-xs sm:text-sm font-normal text-[#af71f1]">
-                          {q}
-                        </button>
-                      ))}
                     </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col h-full relative z-10">
-                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 pr-14 sm:pr-16">
                   <AnimatedLogo isWelcome={false} />
+                  {chat.length > 0 && (
+                    <button
+                      onClick={handleReset}
+                      title="Clear chat"
+                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#af71f1] border border-gray-200 hover:border-[#af71f1]/40 rounded-full px-3 py-1.5 transition-all duration-200 hover:bg-[#af71f1]/5"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      New chat
+                    </button>
+                  )}
                 </div>
 
                 <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
                   <div className="max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
-                    {chat.map((msg, idx) => (
-                      <motion.div key={idx}
+                    {(() => {
+                      const lastBotIdx = chat.reduce((last, m, i) => m.role === 'bot' ? i : last, -1);
+                      return chat.map((msg, idx) => {
+                        const isLastBot = idx === lastBotIdx;
+                        return <motion.div key={idx}
                         initial={{ opacity: 0, y: 20, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         transition={{ duration: 0.3, delay: Math.min(idx * 0.05, 0.3) }}
@@ -1507,26 +1956,51 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                             <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line break-words">{msg.text}</p>
                           </div>
                         ) : msg.cardWidget ? (
-                          <div className="w-full flex items-start gap-3">
-                            <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <RenderCardWidget widget={msg.cardWidget} onSend={sendMessage} />
+                          <div className="w-full flex flex-col gap-2">
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <RenderCardWidget widget={msg.cardWidget} onSend={sendMessage} onPushCard={pushCard} />
+                              </div>
                             </div>
+                            {isLastBot && msg.suggestions && msg.suggestions.length > 0 && (
+                              <div className="flex flex-wrap gap-2 ml-5 mt-8">
+                                {msg.suggestions.map((q, i) => (
+                                  <button key={i} onClick={() => sendMessage(q)}
+                                    className="px-3 py-1.5 text-xs rounded-full border border-[#af71f1] text-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors">
+                                    {q}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <div className="max-w-[85%] flex items-start gap-3">
-                            <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
-                            <div className="rounded-2xl rounded-bl-md px-1 py-1 w-full">
-                              {msg.text ? (
-                                <div className="text-black text-base leading-relaxed break-words px-3 py-2">
-                                  <MarkdownText>{msg.text}</MarkdownText>
-                                </div>
-                              ) : null}
+                          <div className="max-w-[85%] flex flex-col gap-2">
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
+                              <div className="rounded-2xl rounded-bl-md px-1 py-1 w-full">
+                                {msg.text ? (
+                                  <div className="text-black text-base leading-relaxed break-words px-3 py-2">
+                                    <MarkdownText>{msg.text}</MarkdownText>
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
+                            {isLastBot && msg.suggestions && msg.suggestions.length > 0 && (
+                              <div className="flex flex-wrap gap-2 ml-5">
+                                {msg.suggestions.map((q, i) => (
+                                  <button key={i} onClick={() => sendMessage(q)}
+                                    className="px-3 py-1.5 text-xs rounded-full border border-[#af71f1] text-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors">
+                                    {q}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
-                      </motion.div>
-                    ))}
+                      </motion.div>;
+                      });
+                    })()}
 
                     {(isLoading || error) && (
                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} className="flex justify-start">
@@ -1542,7 +2016,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                           <div className="w-full flex items-start gap-3">
                             <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <RenderCardWidget widget={pendingCardWidget} onSend={sendMessage} />
+                              <RenderCardWidget widget={pendingCardWidget} onSend={sendMessage} onPushCard={pushCard} />
                             </div>
                           </div>
                         ) : cleanStreamedText ? (
@@ -1597,7 +2071,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                 </div>
 
                 {/* ── Chat Input (always visible) ── */}
-                <div className="border-t border-gray-100 px-3 sm:px-6 py-3 sm:py-4 bg-white/95 backdrop-blur-sm">
+                <div className="border-t border-white/30 px-3 sm:px-6 py-3 sm:py-4">
                   {/* Voice call status bar */}
                   <AnimatePresence>
                     {(voiceCallActive || voiceCallConnecting) && (
@@ -1646,7 +2120,7 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                               value={message}
                               onChange={(e) => setMessage(e.target.value.slice(0, 2000))}
                               onKeyDown={handleKeyPress}
-                              className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pr-12 sm:pr-14 bg-gray-50 border border-gray-200 rounded-full text-sm sm:text-base placeholder:text-gray-500 text-black focus:outline-none focus:ring-2 focus:ring-[#af71f1] focus:border-transparent"
+                              className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pr-12 sm:pr-14 bg-white/60 backdrop-blur-sm border border-white/50 rounded-full text-sm sm:text-base placeholder:text-gray-500 text-black focus:outline-none focus:ring-2 focus:ring-[#af71f1]/50 focus:border-[#af71f1]/40"
                               disabled={isLoading}
                             />
                             <button
@@ -1662,18 +2136,6 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                               <Mic className={`w-4 h-4 ${isListening ? 'text-white' : ''}`} />
                             </button>
                           </div>
-                          {/* Voice Call button */}
-                          <button
-                            onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
-                            disabled={voiceCallConnecting}
-                            className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center rounded-full transition-all ${
-                              voiceCallConnecting
-                                ? 'bg-amber-400 animate-pulse'
-                                : 'bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]'
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            <Phone className={`w-4 h-4 sm:w-5 sm:h-5 ${voiceCallConnecting ? 'text-white' : ''}`} />
-                          </button>
                           {/* Send button */}
                           <button
                             className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1681,14 +2143,6 @@ const ChatInterface = ({ isOpen, onClose }: ChatInterfaceProps) => {
                           >
                             {isLoading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
                           </button>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {suggestedQuestions.slice(0, 2).map((q, i) => (
-                            <button key={i} onClick={() => handleSuggestionClick(q)}
-                              className="px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border border-[#af71f1] text-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors">
-                              {q}
-                            </button>
-                          ))}
                         </div>
                       </div>
                 </div>

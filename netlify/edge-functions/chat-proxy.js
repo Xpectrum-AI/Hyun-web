@@ -22,14 +22,6 @@ export default async function handler(request, context) {
     return new Response("", { status: 204, headers: corsHeaders });
   }
 
-  // Only accept POST
-  if (request.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   // ── Resolve upstream URL & key ────────────────────────────────
   const apiBaseUrl =
     Netlify.env.get("XPECTRUM_API_BASE_URL") ||
@@ -45,12 +37,79 @@ export default async function handler(request, context) {
     );
   }
 
-  const upstreamUrl = `${apiBaseUrl.replace(/\/+$/, "")}/chat-messages`;
+  const base = apiBaseUrl.replace(/\/+$/, "");
+  const url = new URL(request.url);
+
+  // ── POST /workflow-run or /workflow-book — workflow proxies ──
+  if (request.method === "POST" && (url.pathname === "/workflow-run" || url.pathname === "/workflow-book")) {
+    const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud-v2.xpectrum.co/v1").replace(/\/+$/, "");
+    const isBooking = url.pathname === "/workflow-book";
+    const wfKey = isBooking
+      ? Netlify.env.get("BOOKING_WORKFLOW_API_KEY")
+      : Netlify.env.get("WORKFLOW_API_KEY");
+    if (!wfKey) {
+      return new Response(JSON.stringify({ error: "Workflow API key not configured" }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    try {
+      const body = await request.text();
+      const upstreamRes = await fetch(`${wfBaseUrl}/workflows/run`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${wfKey}`, "Content-Type": "application/json" },
+        body,
+      });
+      const data = await upstreamRes.text();
+      return new Response(data, {
+        status: upstreamRes.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      console.error("Workflow proxy error:", err);
+      return new Response(JSON.stringify({ error: "Upstream workflow error" }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
+  // ── GET /conversations or /messages/* — proxy JSON requests ──
+  if (request.method === "GET" && (
+    url.pathname.startsWith("/conversations") ||
+    url.pathname.startsWith("/messages/")
+  )) {
+    try {
+      const upstreamUrl = `${base}${url.pathname}${url.search}`;
+      const upstreamResponse = await fetch(upstreamUrl, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      const data = await upstreamResponse.text();
+      return new Response(data, {
+        status: upstreamResponse.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      console.error("Messages proxy error:", err);
+      return new Response(JSON.stringify({ error: "Upstream error" }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
+  // ── POST /chat-messages — streaming SSE ───────────────────────
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const upstreamUrl = `${base}/chat-messages`;
 
   try {
     const body = await request.text();
 
-    // ── Forward to upstream API ───────────────────────────────────
     const upstreamResponse = await fetch(upstreamUrl, {
       method: "POST",
       headers: {
@@ -60,7 +119,6 @@ export default async function handler(request, context) {
       body,
     });
 
-    // If upstream failed, relay status + body
     if (!upstreamResponse.ok) {
       const errorBody = await upstreamResponse.text();
       console.error(`Upstream error ${upstreamResponse.status}: ${errorBody}`);
@@ -70,7 +128,6 @@ export default async function handler(request, context) {
       });
     }
 
-    // ── Stream the SSE response back to the browser ─────────────
     const responseHeaders = {
       ...corsHeaders,
       "Content-Type": upstreamResponse.headers.get("Content-Type") || "text/event-stream",
@@ -78,7 +135,6 @@ export default async function handler(request, context) {
       Connection: "keep-alive",
     };
 
-    // Pipe the upstream readable stream straight through
     return new Response(upstreamResponse.body, {
       status: 200,
       headers: responseHeaders,
@@ -96,5 +152,5 @@ export default async function handler(request, context) {
 }
 
 export const config = {
-  path: ["/chat-messages", "/chat-messages/*"],
+  path: ["/chat-messages", "/chat-messages/*", "/conversations", "/conversations/*", "/messages", "/messages/*", "/workflow-run", "/workflow-book"],
 };
