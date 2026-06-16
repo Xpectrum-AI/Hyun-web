@@ -9,31 +9,6 @@ import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
 import haLogo from "@/assets/HA.png";
-import _deliverIcon from "@/assets/Deliver.jpeg";
-import _aiIcon from "@/assets/AI Icon.jpg";
-import _automationIcon from "@/assets/automation icon.jpg";
-import _dataTransformIcon from "@/assets/Data Transformation Icon.png";
-import _diagnoseIcon from "@/assets/Diagnose.jpeg";
-import _designIcon from "@/assets/Design.png";
-
-// Maps title keywords → the same image assets used on the /solutions and /about pages
-const WEBSITE_ICON_MAP: [string, string][] = [
-  ['general it', _deliverIcon],
-  ['it consulting', _deliverIcon],
-  ['agentic', _aiIcon],
-  ['ai solution', _aiIcon],
-  ['automation', _automationIcon],
-  ['app creation', _dataTransformIcon],
-  ['data transform', _dataTransformIcon],
-  ['diagnose', _diagnoseIcon],
-  ['design', _designIcon],
-  ['deliver', _deliverIcon],
-  ['direct', _designIcon],
-];
-const getWebsiteIcon = (title: string): string | undefined => {
-  const lower = title.toLowerCase();
-  return WEBSITE_ICON_MAP.find(([k]) => lower.includes(k))?.[1];
-};
 
 // ─── Markdown Text Renderer ────────────────────────────────────────────────
 // Renders markdown bold (**text**), italic (*text*), links [text](url), etc.
@@ -700,9 +675,28 @@ const ICON_KEYWORD_MAP: Record<string, LucideIcon> = {
 
 const FALLBACK_ICONS: LucideIcon[] = [Lightbulb, BrainCircuit, Workflow, BarChart3, Globe, Shield, Layers, Zap];
 
+// Exact title matches — same icons as the home page "Our Areas of Practice" section
+// and the About page 4D process steps. Checked BEFORE the loose keyword map so that
+// e.g. "Agentic" doesn't accidentally hit the 'it' keyword and return Monitor.
+const TITLE_ICON_MAP: [string, LucideIcon][] = [
+  ['general it', Monitor], ['it consulting', Monitor],
+  ['agentic', BrainCircuit], ['ai solution', BrainCircuit],
+  ['automation', Workflow], ['automate', Workflow],
+  ['app creation', Database], ['data transform', Database],
+  ['diagnose', Lightbulb],
+  ['design', PenLine],
+  ['deliver', Rocket],
+  ['direct', Target],
+];
+
 function resolveIcon(hint: string | undefined, index: number): LucideIcon {
   if (hint) {
     const lower = hint.toLowerCase();
+    // Check exact title mapping first (home page icons)
+    for (const [keyword, Icon] of TITLE_ICON_MAP) {
+      if (lower.includes(keyword)) return Icon;
+    }
+    // Fall back to loose keyword map for unknown card types
     for (const [keyword, Icon] of Object.entries(ICON_KEYWORD_MAP)) {
       if (lower.includes(keyword)) return Icon;
     }
@@ -713,8 +707,7 @@ function resolveIcon(hint: string | undefined, index: number): LucideIcon {
 const FlipCard = memo(({ icon, title, description, index, onLearnMore }: {
   icon?: string; title: string; description: string; index: number; onLearnMore: () => void;
 }) => {
-  const websiteIconSrc = getWebsiteIcon(title);
-  const IconComponent = resolveIcon(icon || title, index);
+  const IconComponent = resolveIcon(title || icon, index);
 
   // CSS animation fires once when the DOM node is first inserted.
   // Unlike useState-based animation, it never replays on React re-renders,
@@ -733,10 +726,7 @@ const FlipCard = memo(({ icon, title, description, index, onLearnMore }: {
       >
         <div>
           <div className="flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm" style={{ width: '56px', height: '56px', marginBottom: '20px' }}>
-            {websiteIconSrc
-              ? <img src={websiteIconSrc} alt="" className="w-8 h-8 object-contain rounded-md" />
-              : <IconComponent size={26} className="text-[#af71f1]" strokeWidth={1.6} />
-            }
+            <IconComponent size={26} className="text-[#af71f1]" strokeWidth={1.6} />
           </div>
           <h4 className="font-semibold text-[#1a1a2e]" style={{ fontSize: '1.05rem', lineHeight: 1.4, letterSpacing: '-0.01em', marginBottom: '10px' }}>
             {title}
