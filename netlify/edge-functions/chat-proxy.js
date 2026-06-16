@@ -72,10 +72,12 @@ export default async function handler(request, context) {
     }
   }
 
-  // ── GET /conversations or /messages/* — proxy JSON requests ──
+  // ── GET /conversations or /messages(/*) — proxy JSON requests ──
+  // Note: /messages (no trailing slash) is used for getMessages?conversation_id=...
+  // and /messages/* for per-message endpoints like /messages/{id}/suggested-questions
   if (request.method === "GET" && (
     url.pathname.startsWith("/conversations") ||
-    url.pathname.startsWith("/messages/")
+    url.pathname.startsWith("/messages")
   )) {
     try {
       const upstreamUrl = `${base}${url.pathname}${url.search}`;
