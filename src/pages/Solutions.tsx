@@ -2,13 +2,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import { Monitor, BrainCircuit, Workflow, Database, type LucideIcon } from "lucide-react";
 import Header from "@/components/Header";
 import ChatInterface from "@/components/ChatInterface";
 import spectrumAiLogo from "@/assets/xpectrumai.png";
-import aiIcon from "@/assets/AI Icon.jpg";
-import automationIcon from "@/assets/automation icon.jpg";
-import dataTransformationIcon from "@/assets/Data Transformation Icon.png";
-import deliverIcon from "@/assets/Deliver.jpeg";
 import agenticAIPicture from "@/assets/Agentic AI Picture.jpg";
 import automationPicture from "@/assets/Automation Picture.jpg";
 import dataTransformationPicture from "@/assets/Data Transformation Pictuare.jpg";
@@ -18,7 +15,10 @@ const Solutions = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [flippedCards, setFlippedCards] = useState<Set<number>>(new Set());
 
-  const solutionsData = [
+  const solutionsData: Array<{
+    id: number; title: string; description: string; image: string;
+    iconBg: string; cardBg: string; border: string; Icon: LucideIcon; featured?: boolean;
+  }> = [
     {
       id: 1,
       title: "General IT Consulting",
@@ -27,7 +27,7 @@ const Solutions = () => {
       iconBg: "#af71f1",
       cardBg: "#fbfbfb",
       border: "#af71f1",
-      icon: deliverIcon,
+      Icon: Monitor,
       featured: true,
     },
     {
@@ -38,7 +38,7 @@ const Solutions = () => {
       iconBg: "#eff1ff",
       cardBg: "linear-gradient(152deg,rgba(251,251,251,1) 0%,rgba(247,239,255,1) 100%)",
       border: "transparent",
-      icon: aiIcon,
+      Icon: BrainCircuit,
     },
     {
       id: 3,
@@ -48,17 +48,17 @@ const Solutions = () => {
       iconBg: "#ffefef",
       cardBg: "linear-gradient(152deg,rgba(251,251,251,1) 0%,rgba(247,239,255,1) 100%)",
       border: "transparent",
-      icon: automationIcon,
+      Icon: Workflow,
     },
     {
       id: 4,
-      title: "App Creation",
+      title: "Data Transformation",
       description: "The most productive way to consolidate data and bring analytics that matters.",
       image: dataTransformationPicture,
       iconBg: "#eff1ff",
       cardBg: "linear-gradient(152deg,rgba(251,251,251,1) 0%,rgba(247,239,255,1) 100%)",
       border: "transparent",
-      icon: dataTransformationIcon,
+      Icon: Database,
     },
   ];
 
@@ -161,22 +161,16 @@ const Solutions = () => {
                         WebkitBackdropFilter: 'blur(16px)',
                       }}
                     >
-                      {solution.icon && (
-                        <div
-                          className="absolute w-11 h-11 top-6 sm:top-[34px] left-6 sm:left-[34px] rounded-xl flex items-center justify-center transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:rotate-3 border border-white/50 shadow-sm"
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.6)',
-                            backdropFilter: 'blur(8px)',
-                            WebkitBackdropFilter: 'blur(8px)',
-                          }}
-                        >
-                          <img
-                            className="w-6 h-6 transition-all duration-300 ease-in-out group-hover:brightness-110"
-                            alt="Icon"
-                            src={solution.icon}
-                          />
-                        </div>
-                      )}
+                      <div
+                        className="absolute w-11 h-11 top-6 sm:top-[34px] left-6 sm:left-[34px] rounded-xl flex items-center justify-center transition-all duration-300 ease-in-out group-hover:scale-110 group-hover:rotate-3 border border-white/50 shadow-sm"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.6)',
+                          backdropFilter: 'blur(8px)',
+                          WebkitBackdropFilter: 'blur(8px)',
+                        }}
+                      >
+                        <solution.Icon size={24} className="text-[#af71f1]" strokeWidth={1.6} />
+                      </div>
 
                       <div className="absolute top-[80px] sm:top-[108px] left-6 sm:left-[34px] right-6 sm:right-[34px]">
                         <h3 className="font-semibold text-[#1a1a2e] text-xl sm:text-2xl tracking-[-0.48px] leading-[24px] sm:leading-[26.4px] transition-all duration-300 ease-in-out group-hover:translate-y-[-2px]">

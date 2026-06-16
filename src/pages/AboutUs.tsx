@@ -1,12 +1,10 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import { Lightbulb, PenLine, Rocket, Target } from "lucide-react";
 import Header from "@/components/Header";
 import ChatInterface from "@/components/ChatInterface";
 import fullLogo from "@/assets/FullLogo_Transparent1.png";
-import diagnoseIcon from "@/assets/Diagnose.jpeg";
-import designIcon from "@/assets/Design.png";
-import deliverIcon from "@/assets/Deliver.jpeg";
 import hyunPhoto from "@/assets/hyunperson.jpg";
 
 const AboutUs = () => {
@@ -88,12 +86,8 @@ const AboutUs = () => {
                 transition={{ duration: 0.5, delay: 0.1 }}
                 className="text-center"
               >
-                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center bg-red-100 rounded-lg">
-                  <img
-                    className="w-8 h-8 object-contain"
-                    alt="Diagnose Icon"
-                    src={diagnoseIcon}
-                  />
+                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm border border-white/50">
+                  <Lightbulb size={28} className="text-[#af71f1]" strokeWidth={1.6} />
                 </div>
                 <h3 className="font-medium text-black text-xl tracking-[-0.40px] leading-[22.0px] mb-4">
                   Step 1: Diagnose
@@ -110,12 +104,8 @@ const AboutUs = () => {
                 transition={{ duration: 0.5, delay: 0.2 }}
                 className="text-center"
               >
-                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center bg-blue-100 rounded-lg">
-                  <img
-                    className="w-8 h-8 object-contain"
-                    alt="Design Icon"
-                    src={designIcon}
-                  />
+                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm border border-white/50">
+                  <PenLine size={28} className="text-[#af71f1]" strokeWidth={1.6} />
                 </div>
                 <h3 className="font-medium text-black text-xl tracking-[-0.40px] leading-[22.0px] mb-4">
                   Step 2: Design
@@ -132,12 +122,8 @@ const AboutUs = () => {
                 transition={{ duration: 0.5, delay: 0.3 }}
                 className="text-center"
               >
-                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center bg-green-100 rounded-lg">
-                  <img
-                    className="w-8 h-8 object-contain"
-                    alt="Deliver Icon"
-                    src={deliverIcon}
-                  />
+                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm border border-white/50">
+                  <Rocket size={28} className="text-[#af71f1]" strokeWidth={1.6} />
                 </div>
                 <h3 className="font-medium text-black text-xl tracking-[-0.40px] leading-[22.0px] mb-4">
                   Step 3: Deliver
@@ -154,12 +140,8 @@ const AboutUs = () => {
                 transition={{ duration: 0.5, delay: 0.4 }}
                 className="text-center"
               >
-                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center bg-purple-100 rounded-lg">
-                  <img
-                    className="w-8 h-8 object-contain"
-                    alt="Direct Icon"
-                    src={designIcon}
-                  />
+                <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm border border-white/50">
+                  <Target size={28} className="text-[#af71f1]" strokeWidth={1.6} />
                 </div>
                 <h3 className="font-medium text-black text-xl tracking-[-0.40px] leading-[22.0px] mb-4">
                   Step 4: Direct
