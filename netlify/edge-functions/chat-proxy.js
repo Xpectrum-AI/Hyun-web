@@ -45,13 +45,9 @@ export default async function handler(request, context) {
     const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud-v2.xpectrum.co/v1").replace(/\/+$/, "");
     const isBooking = url.pathname === "/workflow-book";
     const wfKey = isBooking
-      ? Netlify.env.get("BOOKING_WORKFLOW_API_KEY")
-      : Netlify.env.get("WORKFLOW_API_KEY");
-    if (!wfKey) {
-      return new Response(JSON.stringify({ error: "Workflow API key not configured" }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+      ? (Netlify.env.get("BOOKING_WORKFLOW_API_KEY") || "app-6KvdN7TJjDGfxPSJqC18Mhlk")
+      : (Netlify.env.get("WORKFLOW_API_KEY") || "app-NX9DPU2Oe4zvngT4bdQSUiGY");
+
     try {
       const body = await request.text();
       const upstreamRes = await fetch(`${wfBaseUrl}/workflows/run`, {
