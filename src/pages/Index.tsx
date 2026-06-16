@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
@@ -12,20 +12,28 @@ const Index = () => {
   const [isChatOpen, setIsChatOpen] = useState(() => window.location.hash !== '#home');
   const [flippedCards, setFlippedCards] = useState<Set<number>>(new Set());
   const navigate = useNavigate();
+  // Track whether this is the initial mount so we don't redirect / → #chat on page load
+  const isInitialMount = useRef(true);
 
   // URL rules:
-  //   /        → welcome chat screen (home)
+  //   /        → welcome chat screen (first visit or no conversation)
   //   #chat    → active conversation (has messages)
   //   #home    → landing page
   useEffect(() => {
     if (!isChatOpen) {
       window.history.replaceState(null, '', '#home');
-    } else {
-      // If returning to chat and a conversation already exists, jump straight to #chat
-      const hasConversation = !!localStorage.getItem('hyun-conversation-id');
-      if (hasConversation) window.history.replaceState(null, '', '#chat');
-      else if (window.location.hash === '#home') window.history.replaceState(null, '', '/');
+      isInitialMount.current = false;
+      return;
     }
+    if (isInitialMount.current) {
+      // Page just loaded — respect whatever URL the user arrived at, don't redirect
+      isInitialMount.current = false;
+      return;
+    }
+    // User is returning from the landing page — resume conversation if one exists
+    const hasConversation = !!localStorage.getItem('hyun-conversation-id');
+    if (hasConversation) window.history.replaceState(null, '', '#chat');
+    else window.history.replaceState(null, '', '/');
   }, [isChatOpen]);
 
   const handleChatActive = useCallback(() => {

@@ -1520,21 +1520,16 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
       t2 = setTimeout(() => setIntroPhase('done'), 1500);
     };
 
-    const savedConvId = localStorage.getItem(CONV_KEY);
-
-    // Welcome screen only when there's no existing conversation AND not already in #chat
+    // Welcome screen is ONLY for / (any hash other than #chat)
     if (window.location.hash !== '#chat') {
-      if (!savedConvId) {
-        showIntro();
-        return () => { clearTimeout(t1); clearTimeout(t2); };
-      }
-      // Has existing conversation — skip welcome and resume directly
-      window.history.replaceState(null, '', '#chat');
+      showIntro();
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
 
-    // At #chat (or promoted to #chat): stay in chat mode
+    // At #chat: always stay in chat mode, never show welcome screen
     setShowWelcome(false);
 
+    const savedConvId = localStorage.getItem(CONV_KEY);
     if (!savedConvId || !client) {
       setChat([]);
       return () => { clearTimeout(t1); clearTimeout(t2); };
