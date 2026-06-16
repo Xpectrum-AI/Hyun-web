@@ -262,6 +262,7 @@ export class XpectrumChat {
   async getSuggestedQuestions(messageId: string): Promise<string[]> {
     const res = await this.http.get<{ data: string[] }>(
       `/messages/${messageId}/suggested-questions`,
+      { user: this.config.user || 'sdk-user' },
     );
     return res.data;
   }
