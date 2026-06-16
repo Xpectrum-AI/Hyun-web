@@ -9,6 +9,31 @@ import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
 import haLogo from "@/assets/HA.png";
+import _deliverIcon from "@/assets/Deliver.jpeg";
+import _aiIcon from "@/assets/AI Icon.jpg";
+import _automationIcon from "@/assets/automation icon.jpg";
+import _dataTransformIcon from "@/assets/Data Transformation Icon.png";
+import _diagnoseIcon from "@/assets/Diagnose.jpeg";
+import _designIcon from "@/assets/Design.png";
+
+// Maps title keywords → the same image assets used on the /solutions and /about pages
+const WEBSITE_ICON_MAP: [string, string][] = [
+  ['general it', _deliverIcon],
+  ['it consulting', _deliverIcon],
+  ['agentic', _aiIcon],
+  ['ai solution', _aiIcon],
+  ['automation', _automationIcon],
+  ['app creation', _dataTransformIcon],
+  ['data transform', _dataTransformIcon],
+  ['diagnose', _diagnoseIcon],
+  ['design', _designIcon],
+  ['deliver', _deliverIcon],
+  ['direct', _designIcon],
+];
+const getWebsiteIcon = (title: string): string | undefined => {
+  const lower = title.toLowerCase();
+  return WEBSITE_ICON_MAP.find(([k]) => lower.includes(k))?.[1];
+};
 
 // ─── Markdown Text Renderer ────────────────────────────────────────────────
 // Renders markdown bold (**text**), italic (*text*), links [text](url), etc.
@@ -688,6 +713,7 @@ function resolveIcon(hint: string | undefined, index: number): LucideIcon {
 const FlipCard = memo(({ icon, title, description, index, onLearnMore }: {
   icon?: string; title: string; description: string; index: number; onLearnMore: () => void;
 }) => {
+  const websiteIconSrc = getWebsiteIcon(title);
   const IconComponent = resolveIcon(icon || title, index);
 
   // CSS animation fires once when the DOM node is first inserted.
@@ -707,7 +733,10 @@ const FlipCard = memo(({ icon, title, description, index, onLearnMore }: {
       >
         <div>
           <div className="flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-sm shadow-sm" style={{ width: '56px', height: '56px', marginBottom: '20px' }}>
-            <IconComponent size={26} className="text-[#af71f1]" strokeWidth={1.6} />
+            {websiteIconSrc
+              ? <img src={websiteIconSrc} alt="" className="w-8 h-8 object-contain rounded-md" />
+              : <IconComponent size={26} className="text-[#af71f1]" strokeWidth={1.6} />
+            }
           </div>
           <h4 className="font-semibold text-[#1a1a2e]" style={{ fontSize: '1.05rem', lineHeight: 1.4, letterSpacing: '-0.01em', marginBottom: '10px' }}>
             {title}
