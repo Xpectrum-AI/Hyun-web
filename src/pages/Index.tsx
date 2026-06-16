@@ -36,6 +36,16 @@ const Index = () => {
     else window.history.replaceState(null, '', '/');
   }, [isChatOpen]);
 
+  // Set hash synchronously BEFORE updating state so ChatInterface's effect
+  // sees the correct hash when it runs (child effects fire before parent effects).
+  const openChat = useCallback(() => {
+    const hasConversation = !!localStorage.getItem('hyun-conversation-id');
+    if (hasConversation) {
+      window.history.replaceState(null, '', '#chat');
+    }
+    setIsChatOpen(true);
+  }, []);
+
   const handleChatActive = useCallback(() => {
     if (window.location.hash !== '#chat') {
       window.history.replaceState(null, '', '#chat');
@@ -72,7 +82,7 @@ const Index = () => {
       <div className="w-full max-w-[1600px] mx-auto relative overflow-hidden">
 
         {/* Header */}
-        <Header onBookDemo={() => setIsChatOpen(true)} />
+        <Header onBookDemo={openChat} />
 
         {/* Hero Section */}
         <section id="home" className="relative w-full min-h-[70vh] lg:min-h-screen flex items-center justify-center pt-16 sm:pt-24 lg:pt-32 overflow-hidden">
@@ -98,8 +108,8 @@ const Index = () => {
             </h1>
 
             <div className="inline-flex items-center gap-[30px] relative flex-[0_0_auto] flex-col sm:flex-row">
-              <Button 
-                onClick={() => setIsChatOpen(true)}
+              <Button
+                onClick={openChat}
                 className="px-7 py-[15px] bg-[#0c202b] inline-flex items-center justify-center gap-2.5 rounded text-white font-semibold text-[15px] hover:bg-[#0c202b]/90"
               >
                 <span className="text-xl">»</span>
