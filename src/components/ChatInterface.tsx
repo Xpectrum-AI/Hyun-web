@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import {
   Send, X, Loader2, AlertCircle, Clock, CalendarDays, ChevronRight, Mic, RotateCcw,
   Monitor, Bot, Cog, BarChart3, Search, PenLine, Rocket, Target,
@@ -685,24 +685,19 @@ function resolveIcon(hint: string | undefined, index: number): LucideIcon {
   return FALLBACK_ICONS[index % FALLBACK_ICONS.length];
 }
 
-const FlipCard = ({ icon, title, description, index, onLearnMore }: {
+const FlipCard = memo(({ icon, title, description, index, onLearnMore }: {
   icon?: string; title: string; description: string; index: number; onLearnMore: () => void;
 }) => {
-  const [visible, setVisible] = useState(false);
   const IconComponent = resolveIcon(icon || title, index);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), index * 100);
-    return () => clearTimeout(timer);
-  }, [index]);
-
+  // CSS animation fires once when the DOM node is first inserted.
+  // Unlike useState-based animation, it never replays on React re-renders,
+  // so re-renders triggered by suggestions/post-stream-fetch cause no blink.
   return (
     <div
       style={{
         fontFamily: CARD_FONT,
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(12px)',
-        transition: 'opacity 0.5s ease, transform 0.5s ease',
+        animation: `flipCardEnter 0.5s ease ${index * 100}ms both`,
         minWidth: 0,
       }}
     >
@@ -731,12 +726,12 @@ const FlipCard = ({ icon, title, description, index, onLearnMore }: {
       </div>
     </div>
   );
-};
+});
 
 const ServiceCardGrid = ({ services, onSend }: { services: ServiceItem[]; onSend: (msg: string) => void }) => (
   <div className="my-6">
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-7">
-      {services.map((s, i) => <FlipCard key={s.id || i} icon={s.icon || undefined} title={s.title} description={s.description} index={i} onLearnMore={() => onSend(`Tell me more about ${s.title}`)} />)}
+      {services.map((s, i) => <FlipCard key={i} icon={s.icon || undefined} title={s.title} description={s.description} index={i} onLearnMore={() => onSend(`Tell me more about ${s.title}`)} />)}
     </div>
   </div>
 );
@@ -744,7 +739,7 @@ const ServiceCardGrid = ({ services, onSend }: { services: ServiceItem[]; onSend
 const ProcessCardGrid = ({ steps, onSend }: { steps: ProcessItem[]; onSend: (msg: string) => void }) => (
   <div className="my-6">
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-7">
-      {steps.map((p, i) => <FlipCard key={String(p.step) || String(i)} icon={p.icon || undefined} title={p.title} description={p.description} index={i} onLearnMore={() => onSend(`Tell me more about the ${p.title} step`)} />)}
+      {steps.map((p, i) => <FlipCard key={i} icon={p.icon || undefined} title={p.title} description={p.description} index={i} onLearnMore={() => onSend(`Tell me more about the ${p.title} step`)} />)}
     </div>
   </div>
 );
@@ -912,15 +907,12 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
 
 // Helper: render text with clickable URLs
 const AboutCompanyCard = ({ payload, onSend }: { payload: AboutCompanyItem; onSend: (msg: string) => void }) => {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setVisible(true), 100); return () => clearTimeout(t); }, []);
-
   const descText = payload.description || payload.text || '';
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16, scale: 0.97 }}
-      animate={{ opacity: visible ? 1 : 0, y: visible ? 0 : 16, scale: visible ? 1 : 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
       style={{ fontFamily: CARD_FONT }}
     >
@@ -1182,7 +1174,9 @@ const AvailabilityCalendarCard = ({
   );
 };
 
-const RenderCardWidget = ({
+// memo: widget is the same object reference when only suggestions change (parent spreads
+// the existing cardWidget), so this skips the entire card re-render and eliminates the blink.
+const RenderCardWidget = memo(({
   widget, onSend, onPushCard,
 }: {
   widget: CardWidget;
@@ -1197,7 +1191,8 @@ const RenderCardWidget = ({
       return (
         <div>
           {labels?.title && <h3 className="font-semibold text-base mb-3 text-gray-900">{labels.title}</h3>}
-          <ServiceCardGrid services={services} onSend={onSend} />
+          {/* key prevents React remounting the grid if the conditional h3 above appears/disappears */}
+          <ServiceCardGrid key="service-grid" services={services} onSend={onSend} />
         </div>
       );
     }
@@ -1207,7 +1202,8 @@ const RenderCardWidget = ({
       return (
         <div>
           {labels?.title && <h3 className="font-semibold text-base mb-3 text-gray-900">{labels.title}</h3>}
-          <ProcessCardGrid steps={steps} onSend={onSend} />
+          {/* key prevents React remounting the grid if the conditional h3 above appears/disappears */}
+          <ProcessCardGrid key="process-grid" steps={steps} onSend={onSend} />
         </div>
       );
     }
@@ -1220,7 +1216,7 @@ const RenderCardWidget = ({
     default:
       return null;
   }
-};
+});
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -1234,7 +1230,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const [conversationId, setConversationId] = useState("");
   const [showWelcome, setShowWelcome] = useState(() => window.location.hash !== '#chat');
   const [error, setError] = useState("");
-  const [pendingCardWidget, setPendingCardWidget] = useState<CardWidget | null>(null);
   const [introPhase, setIntroPhase] = useState<'big' | 'shrinking' | 'done'>(window.location.hash === '#chat' ? 'done' : 'big');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -1242,6 +1237,8 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const userScrolledUpRef = useRef(false);
   const chatClientRef = useRef<XpectrumChat | null>(null);
   const conversationIdRef = useRef(conversationId);
+  // Tracks the index of the message just added from stream so we can skip its entry animation
+  const lastStreamedIdxRef = useRef<number | null>(null);
 
   const pushCard = useCallback((card: CardWidget) => {
     setChat(prev => {
@@ -1499,7 +1496,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     } else {
       document.body.classList.remove('overflow-hidden');
       setMessage(""); setStreamedText(""); setIsLoading(false); setError("");
-      setPendingCardWidget(null);
     }
     return () => { document.body.classList.remove('overflow-hidden'); };
   }, [isOpen]);
@@ -1576,7 +1572,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
 
     setChat(prev => [...prev, { role: 'user', text: textToSend }]);
     setMessage(""); setIsLoading(true); setStreamedText(""); setError(""); setShowWelcome(false);
-    setPendingCardWidget(null);
     userScrolledUpRef.current = false;
     onChatActive?.();
 
@@ -1603,7 +1598,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
             if (card) {
               console.log('[ChatDebug] Card extracted from streamed text');
               extractedCard = card;
-              setPendingCardWidget(card);
             }
           }
         },
@@ -1630,7 +1624,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           if (card) {
             console.log('[ChatDebug] Card extracted from thoughts:', card.type, card.payload);
             extractedCard = card;
-            setPendingCardWidget(card);
           }
         },
 
@@ -1644,15 +1637,18 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           if (!extractedCard && fullText) extractedCard = extractCardFromContent(fullText);
 
           if (!messageAdded) {
-            setChat(prev => [...prev, {
-              role: 'bot',
-              text: stripJson(fullText),
-              cardWidget: extractedCard,
-            }]);
+            setChat(prev => {
+              lastStreamedIdxRef.current = prev.length; // index of the new message
+              return [...prev, {
+                role: 'bot',
+                text: stripJson(fullText),
+                cardWidget: extractedCard,
+              }];
+            });
             messageAdded = true;
           }
           setStreamedText('');
-          setPendingCardWidget(null);
+          setIsLoading(false); // stop shimmer immediately; onCompleted is just a fallback
 
           // Post-stream fetch: get stored message with full agent_thought observations
           // (Dify streams thoughts without observations; observations only in stored messages)
@@ -1727,7 +1723,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
               cardWidget: extractedCard,
             }]);
             setStreamedText('');
-            setPendingCardWidget(null);
           }
           setIsLoading(false);
         },
@@ -1765,7 +1760,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     localStorage.removeItem(CONV_KEY);
     setStreamedText("");
     setError("");
-    setPendingCardWidget(null);
     window.history.replaceState(null, '', '/');
   }, []);
 
@@ -1808,6 +1802,10 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
             }
             .streaming-text > * {
               animation: fadeInChunk 0.4s ease-out forwards;
+            }
+            @keyframes flipCardEnter {
+              from { opacity: 0; transform: translateY(12px); }
+              to   { opacity: 1; transform: translateY(0);    }
             }
           `}</style>
 
@@ -1940,10 +1938,16 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                       const lastBotIdx = chat.reduce((last, m, i) => m.role === 'bot' ? i : last, -1);
                       return chat.map((msg, idx) => {
                         const isLastBot = idx === lastBotIdx;
+                        // Bot messages that were just streamed appear instantly (content was already
+                        // visible as streaming text). All other messages get a gentle fade-in.
+                        const justStreamed = lastStreamedIdxRef.current === idx;
+                        const initial = justStreamed
+                          ? { opacity: 1, y: 0, scale: 1 }
+                          : { opacity: 0, y: 20, scale: 0.95 };
                         return <motion.div key={idx}
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                        initial={initial}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ duration: 0.3, delay: Math.min(idx * 0.05, 0.3) }}
+                        transition={{ duration: justStreamed ? 0 : 0.3, delay: justStreamed ? 0 : Math.min(idx * 0.05, 0.3) }}
                         className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
                         {msg.role === 'user' ? (
@@ -2007,13 +2011,6 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                               <span className="break-words">{error}</span>
                             </div>
                           </div>
-                        ) : pendingCardWidget ? (
-                          <div className="w-full flex items-start gap-3">
-                            <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <RenderCardWidget widget={pendingCardWidget} onSend={sendMessage} onPushCard={pushCard} />
-                            </div>
-                          </div>
                         ) : cleanStreamedText ? (
                           <div className="max-w-[85%] flex items-start gap-3">
                             <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
@@ -2023,13 +2020,12 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                             </div>
                           </div>
                         ) : (
-                          // New Shimmer alignment and native Tailwind animation
-                          <div className="max-w-[60%] flex items-start gap-3">
-                            <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2.5 flex-shrink-0" />
-                            <div className="flex flex-col gap-3 py-1 flex-1 w-64">
-                              <div className="h-2.5 bg-gray-200 rounded-full animate-pulse w-[85%]" />
-                              <div className="h-2.5 bg-gray-200 rounded-full animate-pulse w-[60%]" />
-                              <div className="h-2.5 bg-gray-200 rounded-full animate-pulse w-[40%]" />
+                          <div className="flex items-start gap-3">
+                            <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-3 flex-shrink-0" />
+                            <div className="flex items-center gap-1.5 px-3 py-3">
+                              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
                             </div>
                           </div>
                         )}
