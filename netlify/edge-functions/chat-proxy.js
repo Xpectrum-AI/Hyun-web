@@ -152,5 +152,5 @@ export default async function handler(request, context) {
 }
 
 export const config = {
-  path: ["/chat-messages", "/chat-messages/*", "/conversations", "/conversations/*", "/messages", "/messages/*", "/workflow-run", "/workflow-book"],
+  path: ["/chat-messages", "/chat-messages/*", "/conversations", "/conversations/**", "/messages", "/messages/**", "/workflow-run", "/workflow-book"],
 };
