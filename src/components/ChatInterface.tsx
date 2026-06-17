@@ -838,7 +838,6 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="my-2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm text-center">
         <p className="text-sm text-gray-500">No upcoming slots available for <span className="font-medium text-gray-700">{dateLabel}</span>. Please select a different date.</p>
-        <button onClick={() => onSend('I would like to select a different date')} className="mt-3 text-sm text-[#af71f1] underline hover:text-[#9c5ee0]">Select Different Date</button>
       </motion.div>
     );
   }
@@ -905,22 +904,12 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
                 {booking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Confirm
               </button>
-              <button onClick={() => onSend('I would like to select a different date')} className="text-sm text-gray-500 underline hover:text-[#af71f1]">
-                Select Different Date
-              </button>
             </div>
             {bookingError && <p className="text-xs text-red-500">{bookingError}</p>}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {selected === null && (
-        <div className="mt-4">
-          <button onClick={() => onSend('I would like to select a different date')} className="text-sm text-gray-500 underline hover:text-[#af71f1]">
-            Select Different Date
-          </button>
-        </div>
-      )}
     </motion.div>
   );
 };
