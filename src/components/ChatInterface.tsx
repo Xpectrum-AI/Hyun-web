@@ -94,6 +94,7 @@ type ChatMessage = {
   text: string;
   cardWidget?: CardWidget | null;
   suggestions?: string[];
+  intentActions?: string[];
 };
 
 // ─── Helper: Clean JSON from Text Streams ───────────────────────────────────
@@ -1669,6 +1670,39 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           setStreamedText('');
           setIsLoading(false); // stop shimmer immediately; onCompleted is just a fallback
 
+          // Async intent classification — doesn't block rendering
+          const intentText = stripJson(fullText).trim();
+          if (intentText) {
+            fetch('/workflow-intent', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                inputs: { conv: intentText },
+                response_mode: 'blocking',
+                user: 'sdk-user',
+              }),
+            })
+              .then(r => r.json())
+              .then(data => {
+                const outputText = data?.data?.outputs?.text;
+                if (!outputText) return;
+                const flags = JSON.parse(outputText);
+                const isTruthy = (v: any) => v === true || v === 'True' || v === 'true';
+                const actions: string[] = [];
+                if (isTruthy(flags.book_consultation)) actions.push('book_consultation');
+                if (isTruthy(flags.service_offer)) actions.push('service_offer');
+                if (isTruthy(flags.working_processes)) actions.push('working_processes');
+                if (actions.length === 0) return;
+                setChat(prev => {
+                  const updated = [...prev];
+                  const lastBotIdx = updated.map(m => m.role).lastIndexOf('bot');
+                  if (lastBotIdx !== -1) updated[lastBotIdx] = { ...updated[lastBotIdx], intentActions: actions };
+                  return updated;
+                });
+              })
+              .catch(() => {});
+          }
+
           // Post-stream fetch: get stored message with full agent_thought observations
           // (Dify streams thoughts without observations; observations only in stored messages)
           // Always run — content-based extraction may have false-positives; stored observations win.
@@ -1987,6 +2021,24 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                                 <RenderCardWidget widget={msg.cardWidget} onSend={sendMessage} onPushCard={pushCard} />
                               </div>
                             </div>
+                            {isLastBot && msg.intentActions && msg.intentActions.length > 0 && (
+                              <div className="flex flex-wrap gap-2 ml-5 mt-4">
+                                {msg.intentActions.map(action => {
+                                  const label = action === 'book_consultation' ? 'Book a Consultation'
+                                    : action === 'service_offer' ? 'View Our Services'
+                                    : 'See How We Work';
+                                  const prompt = action === 'book_consultation' ? 'I would like to book a consultation'
+                                    : action === 'service_offer' ? 'What services do you offer?'
+                                    : 'Tell me about your process';
+                                  return (
+                                    <button key={action} onClick={() => sendMessage(prompt)}
+                                      className="px-4 py-2 text-xs rounded-full bg-[#af71f1] text-white font-semibold hover:bg-[#9c5ee0] transition-colors shadow-sm">
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {isLastBot && msg.suggestions && msg.suggestions.length > 0 && (
                               <div className="flex flex-wrap gap-2 ml-5 mt-8">
                                 {msg.suggestions.map((q, i) => (
@@ -2010,6 +2062,24 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                                 ) : null}
                               </div>
                             </div>
+                            {isLastBot && msg.intentActions && msg.intentActions.length > 0 && (
+                              <div className="flex flex-wrap gap-2 ml-5">
+                                {msg.intentActions.map(action => {
+                                  const label = action === 'book_consultation' ? 'Book a Consultation'
+                                    : action === 'service_offer' ? 'View Our Services'
+                                    : 'See How We Work';
+                                  const prompt = action === 'book_consultation' ? 'I would like to book a consultation'
+                                    : action === 'service_offer' ? 'What services do you offer?'
+                                    : 'Tell me about your process';
+                                  return (
+                                    <button key={action} onClick={() => sendMessage(prompt)}
+                                      className="px-4 py-2 text-xs rounded-full bg-[#af71f1] text-white font-semibold hover:bg-[#9c5ee0] transition-colors shadow-sm">
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {isLastBot && msg.suggestions && msg.suggestions.length > 0 && (
                               <div className="flex flex-wrap gap-2 ml-5">
                                 {msg.suggestions.map((q, i) => (

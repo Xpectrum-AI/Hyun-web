@@ -48,6 +48,18 @@ export default defineConfig(({ mode }) => {
           });
         },
       },
+      // Forward /workflow-intent to the intent classification workflow
+      '/workflow-intent': {
+        target: env.WORKFLOW_API_BASE_URL || 'https://cloud-v2.xpectrum.co/v1',
+        changeOrigin: true,
+        rewrite: () => '/workflows/run',
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            const key = env.INTENT_WORKFLOW_API_KEY || 'app-iE8Sz29HbJS9SIyHSCvvDvlv';
+            proxyReq.setHeader('Authorization', `Bearer ${key}`);
+          });
+        },
+      },
       // Forward /workflow-run to the availability workflow
       '/workflow-run': {
         target: env.WORKFLOW_API_BASE_URL || 'https://cloud-v2.xpectrum.co/v1',

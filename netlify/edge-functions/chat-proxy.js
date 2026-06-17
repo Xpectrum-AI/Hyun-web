@@ -40,6 +40,30 @@ export default async function handler(request, context) {
   const base = apiBaseUrl.replace(/\/+$/, "");
   const url = new URL(request.url);
 
+  // ── POST /workflow-intent — intent classification (blocking) ──
+  if (request.method === "POST" && url.pathname === "/workflow-intent") {
+    const intentKey = Netlify.env.get("INTENT_WORKFLOW_API_KEY") || "app-iE8Sz29HbJS9SIyHSCvvDvlv";
+    const wfBaseUrl = "https://cloud-v2.xpectrum.co/v1";
+    try {
+      const body = await request.text();
+      const upstreamRes = await fetch(`${wfBaseUrl}/workflows/run`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${intentKey}`, "Content-Type": "application/json" },
+        body,
+      });
+      const data = await upstreamRes.json();
+      return new Response(JSON.stringify(data), {
+        status: upstreamRes.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      console.error("Intent workflow error:", err);
+      return new Response(JSON.stringify({ error: "Intent workflow error" }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   // ── POST /workflow-run or /workflow-book — workflow proxies ──
   if (request.method === "POST" && (url.pathname === "/workflow-run" || url.pathname === "/workflow-book")) {
     const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud-v2.xpectrum.co/v1").replace(/\/+$/, "");
@@ -150,5 +174,5 @@ export default async function handler(request, context) {
 }
 
 export const config = {
-  path: ["/chat-messages", "/chat-messages/*", "/conversations", "/conversations/**", "/messages", "/messages/**", "/workflow-run", "/workflow-book"],
+  path: ["/chat-messages", "/chat-messages/*", "/conversations", "/conversations/**", "/messages", "/messages/**", "/workflow-run", "/workflow-book", "/workflow-intent"],
 };
