@@ -10,6 +10,33 @@
  *   XPECTRUM_API_KEY       or  DIFY_API_KEY         – the Bearer token
  */
 
+const LIVE_BASE_URL = "https://cloud.xpectrum.co/v1";
+
+/** cloud-v2.xpectrum.co was retired and no longer resolves; fetch throws against it. */
+const RETIRED_HOSTS = new Set(["cloud-v2.xpectrum.co"]);
+
+/**
+ * Resolve an upstream base URL, correcting values that can no longer serve
+ * traffic. The Netlify env vars still hold retired values and cannot be
+ * edited from the repo, so a bad value must not be able to take the site down.
+ */
+function resolveBase(raw) {
+  if (!raw) return LIVE_BASE_URL;
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return LIVE_BASE_URL;
+  }
+
+  if (RETIRED_HOSTS.has(parsed.hostname)) return LIVE_BASE_URL;
+
+  const base = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "");
+  // The API is served from /v1; /api/v1 returns 404.
+  return base.endsWith("/api/v1") ? base.slice(0, -"/api/v1".length) + "/v1" : base;
+}
+
 export default async function handler(request, context) {
   // ── CORS preflight ────────────────────────────────────────────
   const corsHeaders = {
@@ -23,27 +50,26 @@ export default async function handler(request, context) {
   }
 
   // ── Resolve upstream URL & key ────────────────────────────────
-  const apiBaseUrl =
-    Netlify.env.get("XPECTRUM_API_BASE_URL") ||
-    Netlify.env.get("DIFY_API_BASE_URL");
   const apiKey =
     Netlify.env.get("XPECTRUM_API_KEY") ||
     Netlify.env.get("DIFY_API_KEY");
 
-  if (!apiBaseUrl || !apiKey) {
+  if (!apiKey) {
     return new Response(
       JSON.stringify({ error: "Server misconfigured – missing API credentials" }),
       { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  const base = apiBaseUrl.replace(/\/+$/, "");
+  const base = resolveBase(
+    Netlify.env.get("XPECTRUM_API_BASE_URL") || Netlify.env.get("DIFY_API_BASE_URL")
+  );
   const url = new URL(request.url);
 
   // ── POST /workflow-intent — intent classification (blocking) ──
   if (request.method === "POST" && url.pathname === "/workflow-intent") {
     const intentKey = Netlify.env.get("INTENT_WORKFLOW_API_KEY") || "app-iE8Sz29HbJS9SIyHSCvvDvlv";
-    const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud.xpectrum.co/v1").replace(/\/+$/, "");
+    const wfBaseUrl = resolveBase(Netlify.env.get("WORKFLOW_API_BASE_URL"));
     try {
       const body = await request.text();
       const upstreamRes = await fetch(`${wfBaseUrl}/workflows/run`, {
@@ -66,7 +92,7 @@ export default async function handler(request, context) {
 
   // ── POST /workflow-run or /workflow-book — workflow proxies ──
   if (request.method === "POST" && (url.pathname === "/workflow-run" || url.pathname === "/workflow-book")) {
-    const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud.xpectrum.co/v1").replace(/\/+$/, "");
+    const wfBaseUrl = resolveBase(Netlify.env.get("WORKFLOW_API_BASE_URL"));
     const isBooking = url.pathname === "/workflow-book";
     const wfKey = isBooking
       ? (Netlify.env.get("BOOKING_WORKFLOW_API_KEY") || "app-6KvdN7TJjDGfxPSJqC18Mhlk")
