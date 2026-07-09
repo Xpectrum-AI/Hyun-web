@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     proxy: {
       // Forward /chat-messages to the Xpectrum chat API, injecting the real API key
       '/chat-messages': {
-        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/api/v1',
+        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/v1',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
       },
       // Forward /conversations (fetch existing conversations by user)
       '/conversations': {
-        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/api/v1',
+        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/v1',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
       },
       // Forward /messages/* (e.g. suggested-questions, message history) to the same API
       '/messages': {
-        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/api/v1',
+        target: env.XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.co/v1',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
       },
       // Forward /workflow-intent to the intent classification workflow
       '/workflow-intent': {
-        target: env.WORKFLOW_API_BASE_URL || 'https://cloud-v2.xpectrum.co/v1',
+        target: env.WORKFLOW_API_BASE_URL || 'https://cloud.xpectrum.co/v1',
         changeOrigin: true,
         rewrite: () => '/workflows/run',
         configure: (proxy) => {
@@ -62,7 +62,7 @@ export default defineConfig(({ mode }) => {
       },
       // Forward /workflow-run to the availability workflow
       '/workflow-run': {
-        target: env.WORKFLOW_API_BASE_URL || 'https://cloud-v2.xpectrum.co/v1',
+        target: env.WORKFLOW_API_BASE_URL || 'https://cloud.xpectrum.co/v1',
         changeOrigin: true,
         rewrite: () => '/workflows/run',
         configure: (proxy) => {
@@ -74,7 +74,7 @@ export default defineConfig(({ mode }) => {
       },
       // Forward /workflow-book to the booking workflow
       '/workflow-book': {
-        target: env.WORKFLOW_API_BASE_URL || 'https://cloud-v2.xpectrum.co/v1',
+        target: env.WORKFLOW_API_BASE_URL || 'https://cloud.xpectrum.co/v1',
         changeOrigin: true,
         rewrite: () => '/workflows/run',
         configure: (proxy) => {

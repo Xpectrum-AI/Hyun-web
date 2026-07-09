@@ -6,7 +6,7 @@
  * streaming the SSE response back to the client in real-time.
  *
  * Env vars used (set in Netlify dashboard, NOT prefixed with VITE_):
- *   XPECTRUM_API_BASE_URL  or  DIFY_API_BASE_URL   – e.g. https://cloud.xpectrum.co/api/v1
+ *   XPECTRUM_API_BASE_URL  or  DIFY_API_BASE_URL   – e.g. https://cloud.xpectrum.co/v1
  *   XPECTRUM_API_KEY       or  DIFY_API_KEY         – the Bearer token
  */
 
@@ -43,7 +43,7 @@ export default async function handler(request, context) {
   // ── POST /workflow-intent — intent classification (blocking) ──
   if (request.method === "POST" && url.pathname === "/workflow-intent") {
     const intentKey = Netlify.env.get("INTENT_WORKFLOW_API_KEY") || "app-iE8Sz29HbJS9SIyHSCvvDvlv";
-    const wfBaseUrl = "https://cloud-v2.xpectrum.co/v1";
+    const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud.xpectrum.co/v1").replace(/\/+$/, "");
     try {
       const body = await request.text();
       const upstreamRes = await fetch(`${wfBaseUrl}/workflows/run`, {
@@ -66,7 +66,7 @@ export default async function handler(request, context) {
 
   // ── POST /workflow-run or /workflow-book — workflow proxies ──
   if (request.method === "POST" && (url.pathname === "/workflow-run" || url.pathname === "/workflow-book")) {
-    const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud-v2.xpectrum.co/v1").replace(/\/+$/, "");
+    const wfBaseUrl = (Netlify.env.get("WORKFLOW_API_BASE_URL") || "https://cloud.xpectrum.co/v1").replace(/\/+$/, "");
     const isBooking = url.pathname === "/workflow-book";
     const wfKey = isBooking
       ? (Netlify.env.get("BOOKING_WORKFLOW_API_KEY") || "app-6KvdN7TJjDGfxPSJqC18Mhlk")
