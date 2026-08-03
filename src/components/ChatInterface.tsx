@@ -577,7 +577,7 @@ function tryParseCompanyProfile(text: string): CardWidget | null {
   return null;
 }
 
-// Used when loading stored Dify messages — no text-based fallback to avoid false profile cards
+// Used when loading stored Xpectrum messages — no text-based fallback to avoid false profile cards
 function extractCardFromStoredAnswer(content: string): CardWidget | null {
   if (!content || typeof content !== 'string') return null;
   const profileCard = tryParseCompanyProfile(content);
@@ -1509,7 +1509,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     return () => { document.body.classList.remove('overflow-hidden'); };
   }, [isOpen]);
 
-  // On open: show welcome at /, load conversation from Dify at #chat
+  // On open: show welcome at /, load conversation from Xpectrum at #chat
   useEffect(() => {
     if (!isOpen) return;
     const client = chatClientRef.current;
@@ -1693,7 +1693,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           }
 
           // Post-stream fetch: get stored message with full agent_thought observations
-          // (Dify streams thoughts without observations; observations only in stored messages)
+          // (Xpectrum streams thoughts without observations; observations only in stored messages)
           // Always run — content-based extraction may have false-positives; stored observations win.
           if (meta.message_id && chatClientRef.current) {
             const convId = meta.conversation_id || conversationIdRef.current;
@@ -1725,7 +1725,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                     }
                   })
                   .catch(() => {});
-              // Give Dify 800ms to commit the message before fetching
+              // Give Xpectrum 800ms to commit the message before fetching
               setTimeout(() => tryFetch(chatClientRef.current), 800);
             }
           }

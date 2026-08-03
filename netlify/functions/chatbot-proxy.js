@@ -77,15 +77,15 @@ exports.handler = async (event, context) => {
     console.log('Body:', body);
 
     // Get environment variables
-    const apiKey = process.env.XPECTRUM_API_KEY || process.env.DIFY_API_KEY;
-    const apiUrl = process.env.XPECTRUM_API_BASE_URL || process.env.DIFY_API_BASE_URL;
+    const apiKey = process.env.XPECTRUM_API_KEY;
+    const apiUrl = process.env.XPECTRUM_API_BASE_URL;
     
     console.log('API Key present:', !!apiKey);
     console.log('API URL present:', !!apiUrl);
 
     if (!apiKey || !apiUrl) {
       console.error('Missing environment variables for chatbot');
-      console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('DIFY') || key.includes('API') || key.includes('XPECTRUM')));
+      console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('API') || key.includes('XPECTRUM')));
       
       // Use fallback values if environment variables are not set
       const fallbackApiKey = 'app-WxAWGosGXvslDCmQdLg2wlHz';

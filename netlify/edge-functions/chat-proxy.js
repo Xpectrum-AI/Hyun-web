@@ -2,12 +2,12 @@
  * Netlify Edge Function – chat proxy with SSE streaming.
  *
  * Receives POST /chat-messages from the @xpectrum/sdk running in the
- * browser and forwards them to the upstream Dify / Xpectrum API,
+ * browser and forwards them to the upstream Xpectrum API,
  * streaming the SSE response back to the client in real-time.
  *
  * Env vars used (set in Netlify dashboard, NOT prefixed with VITE_):
- *   XPECTRUM_API_BASE_URL  or  DIFY_API_BASE_URL   – e.g. https://cloud.xpectrum.dev/v1
- *   XPECTRUM_API_KEY       or  DIFY_API_KEY         – the Bearer token
+ *   XPECTRUM_API_BASE_URL   – e.g. https://cloud.xpectrum.dev/v1
+ *   XPECTRUM_API_KEY        – the Bearer token
  */
 
 const LIVE_BASE_URL = "https://cloud.xpectrum.dev/v1";
@@ -55,9 +55,7 @@ export default async function handler(request, context) {
   }
 
   // ── Resolve upstream URL & key ────────────────────────────────
-  const apiKey =
-    Netlify.env.get("XPECTRUM_API_KEY") ||
-    Netlify.env.get("DIFY_API_KEY");
+  const apiKey = Netlify.env.get("XPECTRUM_API_KEY");
 
   if (!apiKey) {
     return new Response(
@@ -66,9 +64,7 @@ export default async function handler(request, context) {
     );
   }
 
-  const base = resolveBase(
-    Netlify.env.get("XPECTRUM_API_BASE_URL") || Netlify.env.get("DIFY_API_BASE_URL")
-  );
+  const base = resolveBase(Netlify.env.get("XPECTRUM_API_BASE_URL"));
   const url = new URL(request.url);
 
   // ── POST /workflow-intent — intent classification (blocking) ──

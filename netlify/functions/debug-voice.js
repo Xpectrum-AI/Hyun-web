@@ -26,14 +26,14 @@ exports.handler = async (event, context) => {
     // Check environment variables
     const apiKey = process.env.VOICE_API_KEY;
     const backendUrl = process.env.VOICE_API_BASE_URL;
-    const difyApiKey = process.env.DIFY_API_KEY;
-    const difyApiUrl = process.env.DIFY_API_BASE_URL;
-    
+    const chatApiKey = process.env.XPECTRUM_API_KEY;
+    const chatApiUrl = process.env.XPECTRUM_API_BASE_URL;
+
     console.log('Environment variables:');
     console.log('VOICE_API_KEY present:', !!apiKey);
     console.log('VOICE_API_BASE_URL present:', !!backendUrl);
-    console.log('DIFY_API_KEY present:', !!difyApiKey);
-    console.log('DIFY_API_BASE_URL present:', !!difyApiUrl);
+    console.log('XPECTRUM_API_KEY present:', !!chatApiKey);
+    console.log('XPECTRUM_API_BASE_URL present:', !!chatApiUrl);
 
     const debugInfo = {
       message: 'Debug voice function is working',
@@ -41,8 +41,8 @@ exports.handler = async (event, context) => {
       environment: {
         voiceApiKeyPresent: !!apiKey,
         voiceApiUrlPresent: !!backendUrl,
-        difyApiKeyPresent: !!difyApiKey,
-        difyApiUrlPresent: !!difyApiUrl,
+        chatApiKeyPresent: !!chatApiKey,
+        chatApiUrlPresent: !!chatApiUrl,
         nodeVersion: process.version,
         functionName: 'debug-voice'
       },

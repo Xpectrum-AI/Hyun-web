@@ -25,7 +25,7 @@ exports.handler = async (event, context) => {
         VOICE_API_BASE_URL: process.env.VOICE_API_BASE_URL ? 'SET' : 'NOT SET',
       },
       availableEnvVars: Object.keys(process.env).filter(key => 
-        key.includes('VOICE') || key.includes('API') || key.includes('DIFY')
+        key.includes('VOICE') || key.includes('API') || key.includes('XPECTRUM')
       )
     }),
   };

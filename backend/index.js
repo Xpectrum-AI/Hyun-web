@@ -8,12 +8,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const API_URL = process.env.XPECTRUM_API_BASE_URL 
-  ? `${process.env.XPECTRUM_API_BASE_URL}/chat-messages` 
-  : process.env.DIFY_API_BASE_URL 
-    ? `${process.env.DIFY_API_BASE_URL}/chat-messages` 
-    : 'https://xpectrum-main-app-prod-cocfr.ondigitalocean.app/api/v1/chat-messages';
-const API_KEY = process.env.XPECTRUM_API_KEY || process.env.DIFY_API_KEY || 'app-MCjDesYMQxIhZjdgziHWyN1G';
+const API_URL = process.env.XPECTRUM_API_BASE_URL
+  ? `${process.env.XPECTRUM_API_BASE_URL}/chat-messages`
+  : 'https://cloud.xpectrum.dev/v1/chat-messages';
+const API_KEY = process.env.XPECTRUM_API_KEY;
 
 app.post(['/chat', '/chat-messages'], async (req, res) => {
   try {
@@ -102,7 +100,7 @@ app.post(['/chat', '/chat-messages'], async (req, res) => {
     }
   } catch (err) {
     console.error('Chat proxy error:', err);
-    // Don't return error responses - let Dify handle it
+    // Don't return error responses - let the upstream API handle it
     res.status(500).json({ error: 'Service temporarily unavailable' });
   }
 });
