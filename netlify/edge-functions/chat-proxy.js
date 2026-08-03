@@ -6,19 +6,24 @@
  * streaming the SSE response back to the client in real-time.
  *
  * Env vars used (set in Netlify dashboard, NOT prefixed with VITE_):
- *   XPECTRUM_API_BASE_URL  or  DIFY_API_BASE_URL   – e.g. https://cloud.xpectrum.co/v1
+ *   XPECTRUM_API_BASE_URL  or  DIFY_API_BASE_URL   – e.g. https://cloud.xpectrum.dev/v1
  *   XPECTRUM_API_KEY       or  DIFY_API_KEY         – the Bearer token
  */
 
-const LIVE_BASE_URL = "https://cloud.xpectrum.co/v1";
-
-/** cloud-v2.xpectrum.co was retired and no longer resolves; fetch throws against it. */
-const RETIRED_HOSTS = new Set(["cloud-v2.xpectrum.co"]);
+const LIVE_BASE_URL = "https://cloud.xpectrum.dev/v1";
 
 /**
- * Resolve an upstream base URL, correcting values that can no longer serve
- * traffic. The Netlify env vars still hold retired values and cannot be
- * edited from the repo, so a bad value must not be able to take the site down.
+ * Hosts that must be remapped onto the canonical LIVE_BASE_URL:
+ *   - cloud-v2.xpectrum.co was retired and no longer resolves (fetch throws).
+ *   - cloud.xpectrum.co is the old domain, superseded by cloud.xpectrum.dev.
+ * The Netlify env vars may still hold either and cannot be edited from the
+ * repo, so a stale value must not be able to route traffic off .dev.
+ */
+const REMAPPED_HOSTS = new Set(["cloud-v2.xpectrum.co", "cloud.xpectrum.co"]);
+
+/**
+ * Resolve an upstream base URL, correcting values that point at a retired or
+ * superseded host. A bad value must not be able to take the site down.
  */
 function resolveBase(raw) {
   if (!raw) return LIVE_BASE_URL;
@@ -30,7 +35,7 @@ function resolveBase(raw) {
     return LIVE_BASE_URL;
   }
 
-  if (RETIRED_HOSTS.has(parsed.hostname)) return LIVE_BASE_URL;
+  if (REMAPPED_HOSTS.has(parsed.hostname)) return LIVE_BASE_URL;
 
   const base = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "");
   // The API is served from /v1; /api/v1 returns 404.
