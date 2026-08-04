@@ -18,7 +18,7 @@ XPECTRUM_API_KEY=app-WxAWGosGXvslDCmQdLg2wlHz
 XPECTRUM_API_BASE_URL=https://xpectrum-main-app-prod-cocfr.ondigitalocean.app/api/v1
 ```
 
-**Note:** The code also supports the old `DIFY_API_KEY` and `DIFY_API_BASE_URL` variables for backward compatibility.
+**Note:** The code also supports the old `XPECTRUM_API_KEY` and `XPECTRUM_API_BASE_URL` variables for backward compatibility.
 
 ### For Local Development
 Create or update your `.env` file in the project root:
@@ -46,7 +46,7 @@ curl -X POST 'https://xpectrum-main-app-prod-cocfr.ondigitalocean.app/api/v1/cha
       {
         "type": "image",
         "transfer_method": "remote_url",
-        "url": "https://cloud.dify.ai/logo/logo-site.png"
+        "url": "https://example.com/image.png"
       }
     ]
   }'
@@ -58,9 +58,9 @@ curl -X POST 'https://xpectrum-main-app-prod-cocfr.ondigitalocean.app/api/v1/cha
 2. **`backend/index.js`** - Local development backend server
 
 Both files now:
-- Use the new Xpectrum AI API endpoint
-- Support both `XPECTRUM_API_*` and `DIFY_API_*` environment variables (for backward compatibility)
-- Fall back to the new endpoint if no environment variables are set
+- Use the Xpectrum AI API endpoint
+- Read the `XPECTRUM_API_*` environment variables
+- Fall back to the default endpoint if no environment variables are set
 
 ## Testing
 

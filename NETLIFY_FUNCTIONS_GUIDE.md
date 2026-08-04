@@ -23,7 +23,7 @@ This guide explains the Netlify Functions setup for the Hyun website, including 
 ### 3. Chatbot Proxy
 - **File**: `netlify/functions/chatbot-proxy.js`
 - **URL**: `/.netlify/functions/chatbot-proxy` or `/chat`
-- **Purpose**: Proxy for Dify AI chatbot API calls
+- **Purpose**: Proxy for Xpectrum AI chatbot API calls
 - **Dependencies**: None (uses only built-in Node.js modules)
 - **Endpoints**:
   - `POST /chat` - Chatbot API proxy
@@ -36,8 +36,8 @@ Set these in your Netlify dashboard under Site Settings → Environment Variable
 VOICE_API_KEY=xpectrum-ai@123
 VOICE_API_BASE_URL=https://d3sgivh2kmd3c8.cloudfront.net
 VITE_VOICE_API_KEY=xpectrum-ai@123
-DIFY_API_BASE_URL=https://demos.xpectrum-ai.com/v1
-DIFY_API_KEY=app-qXbGcG3BX32wyKAIQP9Vlnol
+XPECTRUM_API_BASE_URL=https://cloud.xpectrum.dev/v1
+XPECTRUM_API_KEY=your-xpectrum-api-key
 ```
 
 ## Testing Functions

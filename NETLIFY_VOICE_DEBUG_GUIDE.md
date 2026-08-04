@@ -15,8 +15,8 @@ Go to your Netlify dashboard and set these environment variables:
 ```
 VOICE_API_BASE_URL=https://d3sgivh2kmd3c8.cloudfront.net
 VOICE_API_KEY=xpectrum-ai@123
-DIFY_API_BASE_URL=https://demos.xpectrum-ai.com/v1
-DIFY_API_KEY=app-qXbGcG3BX32wyKAIQP9Vlnol
+XPECTRUM_API_BASE_URL=https://cloud.xpectrum.dev/v1
+XPECTRUM_API_KEY=your-xpectrum-api-key
 ```
 
 **How to set environment variables in Netlify:**

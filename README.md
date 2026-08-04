@@ -50,7 +50,7 @@ This project is built with:
 - **Animations**: Framer Motion
 - **Routing**: React Router DOM
 - **Backend**: Express.js, Node.js
-- **AI Integration**: Dify AI API
+- **AI Integration**: Xpectrum AI API
 - **Deployment**: Netlify
 
 ## Project Structure

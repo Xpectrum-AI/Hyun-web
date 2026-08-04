@@ -9,8 +9,8 @@ To deploy the Hyun website with voice call functionality on Netlify, you need to
 1. **VOICE_API_KEY**: `xpectrum-ai@123`
 2. **VOICE_API_BASE_URL**: `https://d3sgivh2kmd3c8.cloudfront.net`
 3. **VITE_VOICE_API_KEY**: `xpectrum-ai@123` (for frontend)
-4. **DIFY_API_BASE_URL**: `https://demos.xpectrum-ai.com/v1`
-5. **DIFY_API_KEY**: `app-qXbGcG3BX32wyKAIQP9Vlnol`
+4. **XPECTRUM_API_BASE_URL**: `https://cloud.xpectrum.dev/v1`
+5. **XPECTRUM_API_KEY**: `your-xpectrum-api-key`
 
 ### How to Set Environment Variables in Netlify:
 
@@ -44,8 +44,8 @@ The `netlify.toml` file configures:
 4. Ensure the voice API credentials are valid
 
 ### Chatbot Not Working:
-1. Verify DIFY_API_KEY and DIFY_API_BASE_URL are set
-2. Check that the Dify API is accessible
+1. Verify XPECTRUM_API_KEY and XPECTRUM_API_BASE_URL are set
+2. Check that the Xpectrum API is accessible
 3. Look for any 404 errors in the browser console
 
 ## Testing
@@ -53,4 +53,4 @@ The `netlify.toml` file configures:
 After deployment, you can test:
 1. Visit `https://your-site.netlify.app/.netlify/functions/test-voice` to test Netlify Functions
 2. Try the voice call button to test voice integration
-3. Use the chatbot to test Dify AI integration
+3. Use the chatbot to test Xpectrum AI integration

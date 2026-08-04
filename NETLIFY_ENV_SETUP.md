@@ -19,8 +19,8 @@ VOICE_API_BASE_URL=https://d3sgivh2kmd3c8.cloudfront.net
 
 ### 3. Optional Variables (for chat functionality)
 ```
-DIFY_API_KEY=app-qXbGcG3BX32wyKAIQP9Vlnol
-DIFY_API_BASE_URL=https://demos.xpectrum-ai.com/v1
+XPECTRUM_API_KEY=your-xpectrum-api-key
+XPECTRUM_API_BASE_URL=https://cloud.xpectrum.dev/v1
 ```
 
 ## How to Set Environment Variables in Netlify

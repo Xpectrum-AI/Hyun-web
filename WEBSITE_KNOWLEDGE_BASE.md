@@ -182,7 +182,7 @@ We architect enterprise-grade agentic systems that handle complex business logic
 ### Backend
 - **Runtime:** Node.js
 - **Framework:** Express.js
-- **AI Integration:** Dify AI API
+- **AI Integration:** Xpectrum AI API
 
 ### Deployment
 - **Platform:** Netlify

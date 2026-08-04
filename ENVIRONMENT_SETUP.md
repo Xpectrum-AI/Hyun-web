@@ -73,7 +73,7 @@ cd .. && npm run dev -- --port 1000
 
 ## Testing
 
-1. **Chatbot**: Should work with real Dify responses
+1. **Chatbot**: Should work with real Xpectrum responses
 2. **Voice Call**: Should connect to Pravina agent using the provided API credentials
 
 ## Troubleshooting

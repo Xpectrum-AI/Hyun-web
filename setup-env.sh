@@ -16,9 +16,9 @@ VOICE_API_KEY=xpectrum-ai@123
 # Frontend Voice API (Vite requires VITE_ prefix)
 VITE_VOICE_API_KEY=xpectrum-ai@123
 
-# Dify Chatbot Configuration
-DIFY_API_BASE_URL=https://demos.xpectrum-ai.com/v1
-DIFY_API_KEY=app-qXbGcG3BX32wyKAIQP9Vlnol
+# Xpectrum Chatbot Configuration
+XPECTRUM_API_BASE_URL=https://cloud.xpectrum.dev/v1
+XPECTRUM_API_KEY=your-xpectrum-api-key
 EOF
 
 echo "✅ .env file created successfully!"
@@ -29,8 +29,8 @@ echo "- VITE_CARTESIA_VOICE_ID: 5c5ad5e7-1020-476b-8b91-fdcbe9cc313c"
 echo "- VOICE_API_BASE_URL: https://d3sgivh2kmd3c8.cloudfront.net"
 echo "- VOICE_API_KEY: xpectrum-ai@123"
 echo "- VITE_VOICE_API_KEY: xpectrum-ai@123"
-echo "- DIFY_API_BASE_URL: https://demos.xpectrum-ai.com/v1"
-echo "- DIFY_API_KEY: app-qXbGcG3BX32wyKAIQP9Vlnol"
+echo "- XPECTRUM_API_BASE_URL: https://cloud.xpectrum.dev/v1"
+echo "- XPECTRUM_API_KEY: your-xpectrum-api-key"
 echo ""
 echo "🚀 You can now restart your servers to use the environment variables!"
 echo ""
