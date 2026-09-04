@@ -1231,9 +1231,45 @@ const RenderCardWidget = memo(({
 
 interface ChatInterfaceProps { isOpen: boolean; onClose: () => void; onChatActive?: () => void }
 
+// ─── Visitor Profile / User Personalization ─────────────────────────
+type VisitorProfile = {
+  firstName: string;
+  email: string;
+  company: string;
+};
+
 const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) => {
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatMessage[]>([]);
+
+  // ─── Visitor Details ──────────────────────────────────────────────
+  const [visitorProfile, setVisitorProfile] = useState<VisitorProfile>(() => {
+    const saved = localStorage.getItem('hyun-user-profile');
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+
+        return {
+          firstName: parsed.firstName || '',
+          email:
+            parsed.email ||
+            localStorage.getItem('hyun-user-email') ||
+            '',
+          company: parsed.company || '',
+        };
+      } catch {
+        // Ignore invalid profile details
+      }
+    }
+
+    return {
+      firstName: '',
+      email: localStorage.getItem('hyun-user-email') || '',
+      company: '',
+    };
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [streamedText, setStreamedText] = useState("");
   const [conversationId, setConversationId] = useState("");
@@ -1246,7 +1282,12 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const userScrolledUpRef = useRef(false);
   const chatClientRef = useRef<XpectrumChat | null>(null);
   const conversationIdRef = useRef(conversationId);
-  // Tracks the index of the message just added from stream so we can skip its entry animation
+
+  // Keeps the latest visitor profile immediately available
+  // when sending a message.
+  const visitorProfileRef = useRef<VisitorProfile>(visitorProfile);
+
+  // Tracks the index of the message just added from stream so we can skip its entry animation.
   const lastStreamedIdxRef = useRef<number | null>(null);
 
   const pushCard = useCallback((card: CardWidget) => {
@@ -1305,6 +1346,19 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
       localStorage.setItem(CONV_KEY, conversationId);
     }
   }, [conversationId]);
+  //----visior profile details-------
+  useEffect(() => {
+    visitorProfileRef.current = visitorProfile;
+
+    localStorage.setItem(
+    'hyun-user-profile',
+    JSON.stringify(visitorProfile)
+   );
+
+    if (visitorProfile.email) {
+      localStorage.setItem('hyun-user-email', visitorProfile.email);
+    }
+  }, [visitorProfile]);
 
   // ── Voice Input (Web Speech API) ──────────────────────────────
   const [isListening, setIsListening] = useState(false);
@@ -1568,11 +1622,50 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
 
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isOpen]);
+  const updateVisitorProfileFromMessage = useCallback((text: string) => {
+      const patterns = [
+      /(?:my name is|my name's)\s+([a-zA-Z][a-zA-Z'-]*)/i,
+      /(?:i am|i'm|im)\s+([a-zA-Z][a-zA-Z'-]*)/i,
+      /(?:call me|you can call me)\s+([a-zA-Z][a-zA-Z'-]*)/i,
+    ];
 
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+
+      if (!match?.[1]) {
+        continue;
+      }
+
+      const firstName =
+        match[1].charAt(0).toUpperCase() +
+        match[1].slice(1).toLowerCase();
+
+      const updatedProfile = {
+        ...visitorProfileRef.current,
+        firstName,
+      };
+
+      visitorProfileRef.current = updatedProfile;
+      setVisitorProfile(updatedProfile);
+
+      localStorage.setItem(
+        'hyun-user-profile',
+        JSON.stringify(updatedProfile)
+      );
+
+      console.log('[Visitor Profile] Name updated:', firstName);
+
+      return firstName;
+    }
+
+    return null;
+  }, []);
   const handleSend = async (eOrMsg?: string | React.MouseEvent | React.FormEvent) => {
     if (eOrMsg && typeof eOrMsg === 'object' && 'preventDefault' in eOrMsg) eOrMsg.preventDefault();
     const textToSend = typeof eOrMsg === 'string' ? eOrMsg : message;
     if (!textToSend.trim() || textToSend.length > 2000) return;
+
+    updateVisitorProfileFromMessage(textToSend);
 
     if (!chatClientRef.current) {
       setError('Chat is not configured.');
@@ -1592,6 +1685,12 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     const doSend = (convId: string) => {
       return chatClientRef.current!.sendMessage(textToSend, {
         conversationId: convId || undefined,
+
+        inputs: {
+          visitor_first_name: visitorProfileRef.current.firstName || '',
+          visitor_email: visitorProfileRef.current.email || '',
+          visitor_company: visitorProfileRef.current.company || '',
+        },
 
         onMessage: (accumulatedText: string, _messageId: string, newConversationId: string) => {
           fullText = accumulatedText;
