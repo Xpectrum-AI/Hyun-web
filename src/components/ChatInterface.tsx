@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
+//import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
+import { XpectrumChat, type ThoughtEvent } from "@/lib/xpectrum";
+import { XpectrumVoice, type TranscriptionSegment } from "xpectrum";
 import haLogo from "@/assets/HA.png";
 
 // ─── Markdown Text Renderer ────────────────────────────────────────────────
@@ -1458,20 +1460,28 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const voiceTranscriptsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // When VITE_VOICE_BASE_URL is empty, use the current origin + /voice so requests
-    // go through the Netlify function proxy at /voice/*.
-    const baseUrl = import.meta.env.VITE_VOICE_BASE_URL || `${window.location.origin}/voice`;
-    const apiKey = import.meta.env.VITE_VOICE_API_KEY || 'proxy';
-    const agentName = import.meta.env.VITE_VOICE_AGENT_NAME;
-    console.log('[Voice Init]', { baseUrl, apiKey: apiKey ? '***' : 'MISSING', agentName: agentName || 'MISSING' });
-    if (agentName) {
-      xpectrumVoiceRef.current = new XpectrumVoice({ baseUrl, apiKey, agentName });
-      console.log('[Voice Init] XpectrumVoice created successfully');
-    } else {
-      console.error('[Voice Init] Missing agentName — voice will not work');
-    }
-    return () => { xpectrumVoiceRef.current?.destroy(); };
-  }, []);
+  const baseUrl =
+    import.meta.env.VITE_XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.dev/v1';
+  const apiKey = import.meta.env.VITE_XPECTRUM_API_KEY;
+
+  console.log('[Voice Init]', {
+    baseUrl,
+    apiKey: apiKey ? '***' : 'MISSING',
+  });
+
+  if (apiKey) {
+    xpectrumVoiceRef.current = new XpectrumVoice({
+      baseUrl,
+      apiKey,
+    });
+
+    console.log('[Voice Init] XpectrumVoice created successfully');
+  } else {
+    console.error('[Voice Init] Missing XPECTRUM_API_KEY — voice will not work');
+  }
+
+  return () => {
+    xpectrumVoiceRef.current?.destroy(); }; }, []);
 
   useEffect(() => {
     voiceTranscriptsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1523,6 +1533,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     xpectrumVoiceRef.current?.disconnect();
     setVoiceCallActive(false);
     setVoiceCallConnecting(false);
+    setVoiceTranscripts([]);
   }, []);
 
   // Cleanup voice call on chat close
@@ -2310,6 +2321,25 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                               <Mic className={`w-4 h-4 ${isListening ? 'text-white' : ''}`} />
                             </button>
                           </div>
+                          {/* Voice call button */}
+                          <button
+                            type="button"
+                            onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
+                            disabled={voiceCallConnecting || isLoading}
+                            title={voiceCallActive ? "End voice call" : "Start voice call"}
+                            className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              voiceCallActive
+                                ? 'bg-red-500 hover:bg-red-600' 
+                                : 'bg-white/70 hover:bg-white text-[#af71f1] border border-[#af71f1]/30'
+                            }`}
+                          >                           
+                            {voiceCallActive ? (
+                              <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                            ) : (
+                              <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+                            )}
+                          </button>
+
                           {/* Send button */}
                           <button
                             className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
