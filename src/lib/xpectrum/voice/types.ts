@@ -6,7 +6,6 @@ export interface XpectrumVoiceConfig {
   /** API key for authentication (x-api-key header) */
   apiKey: string;
   /** Agent name to connect to (e.g. 'my-sales-agent') */
-  agentName: string;
 }
 
 // ─── Token Response ─────────────────────────────────────────────────────────

@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
+//import { XpectrumChat, XpectrumVoice, type TranscriptionSegment, type ThoughtEvent } from "@/lib/xpectrum";
+import { XpectrumChat, type ThoughtEvent } from "@/lib/xpectrum";
+import { XpectrumVoice, type TranscriptionSegment } from "xpectrum";
 import haLogo from "@/assets/HA.png";
 
 // ─── Markdown Text Renderer ────────────────────────────────────────────────
@@ -1231,9 +1233,45 @@ const RenderCardWidget = memo(({
 
 interface ChatInterfaceProps { isOpen: boolean; onClose: () => void; onChatActive?: () => void }
 
+// ─── Visitor Profile / User Personalization ─────────────────────────
+type VisitorProfile = {
+  firstName: string;
+  email: string;
+  company: string;
+};
+
 const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) => {
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatMessage[]>([]);
+
+  // ─── Visitor Details ──────────────────────────────────────────────
+  const [visitorProfile, setVisitorProfile] = useState<VisitorProfile>(() => {
+    const saved = localStorage.getItem('hyun-user-profile');
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+
+        return {
+          firstName: parsed.firstName || '',
+          email:
+            parsed.email ||
+            localStorage.getItem('hyun-user-email') ||
+            '',
+          company: parsed.company || '',
+        };
+      } catch {
+        // Ignore invalid profile details
+      }
+    }
+
+    return {
+      firstName: '',
+      email: localStorage.getItem('hyun-user-email') || '',
+      company: '',
+    };
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [streamedText, setStreamedText] = useState("");
   const [conversationId, setConversationId] = useState("");
@@ -1246,7 +1284,12 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const userScrolledUpRef = useRef(false);
   const chatClientRef = useRef<XpectrumChat | null>(null);
   const conversationIdRef = useRef(conversationId);
-  // Tracks the index of the message just added from stream so we can skip its entry animation
+
+  // Keeps the latest visitor profile immediately available
+  // when sending a message.
+  const visitorProfileRef = useRef<VisitorProfile>(visitorProfile);
+
+  // Tracks the index of the message just added from stream so we can skip its entry animation.
   const lastStreamedIdxRef = useRef<number | null>(null);
 
   const pushCard = useCallback((card: CardWidget) => {
@@ -1305,6 +1348,19 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
       localStorage.setItem(CONV_KEY, conversationId);
     }
   }, [conversationId]);
+  //----visior profile details-------
+  useEffect(() => {
+    visitorProfileRef.current = visitorProfile;
+
+    localStorage.setItem(
+    'hyun-user-profile',
+    JSON.stringify(visitorProfile)
+   );
+
+    if (visitorProfile.email) {
+      localStorage.setItem('hyun-user-email', visitorProfile.email);
+    }
+  }, [visitorProfile]);
 
   // ── Voice Input (Web Speech API) ──────────────────────────────
   const [isListening, setIsListening] = useState(false);
@@ -1404,20 +1460,28 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   const voiceTranscriptsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // When VITE_VOICE_BASE_URL is empty, use the current origin + /voice so requests
-    // go through the Netlify function proxy at /voice/*.
-    const baseUrl = import.meta.env.VITE_VOICE_BASE_URL || `${window.location.origin}/voice`;
-    const apiKey = import.meta.env.VITE_VOICE_API_KEY || 'proxy';
-    const agentName = import.meta.env.VITE_VOICE_AGENT_NAME;
-    console.log('[Voice Init]', { baseUrl, apiKey: apiKey ? '***' : 'MISSING', agentName: agentName || 'MISSING' });
-    if (agentName) {
-      xpectrumVoiceRef.current = new XpectrumVoice({ baseUrl, apiKey, agentName });
-      console.log('[Voice Init] XpectrumVoice created successfully');
-    } else {
-      console.error('[Voice Init] Missing agentName — voice will not work');
-    }
-    return () => { xpectrumVoiceRef.current?.destroy(); };
-  }, []);
+  const baseUrl =
+    import.meta.env.VITE_XPECTRUM_API_BASE_URL || 'https://cloud.xpectrum.dev/v1';
+  const apiKey = import.meta.env.VITE_XPECTRUM_API_KEY;
+
+  console.log('[Voice Init]', {
+    baseUrl,
+    apiKey: apiKey ? '***' : 'MISSING',
+  });
+
+  if (apiKey) {
+    xpectrumVoiceRef.current = new XpectrumVoice({
+      baseUrl,
+      apiKey,
+    });
+
+    console.log('[Voice Init] XpectrumVoice created successfully');
+  } else {
+    console.error('[Voice Init] Missing XPECTRUM_API_KEY — voice will not work');
+  }
+
+  return () => {
+    xpectrumVoiceRef.current?.destroy(); }; }, []);
 
   useEffect(() => {
     voiceTranscriptsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1469,6 +1533,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     xpectrumVoiceRef.current?.disconnect();
     setVoiceCallActive(false);
     setVoiceCallConnecting(false);
+    setVoiceTranscripts([]);
   }, []);
 
   // Cleanup voice call on chat close
@@ -1568,11 +1633,50 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
 
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isOpen]);
+  const updateVisitorProfileFromMessage = useCallback((text: string) => {
+      const patterns = [
+      /(?:my name is|my name's)\s+([a-zA-Z][a-zA-Z'-]*)/i,
+      /(?:i am|i'm|im)\s+([a-zA-Z][a-zA-Z'-]*)/i,
+      /(?:call me|you can call me)\s+([a-zA-Z][a-zA-Z'-]*)/i,
+    ];
 
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+
+      if (!match?.[1]) {
+        continue;
+      }
+
+      const firstName =
+        match[1].charAt(0).toUpperCase() +
+        match[1].slice(1).toLowerCase();
+
+      const updatedProfile = {
+        ...visitorProfileRef.current,
+        firstName,
+      };
+
+      visitorProfileRef.current = updatedProfile;
+      setVisitorProfile(updatedProfile);
+
+      localStorage.setItem(
+        'hyun-user-profile',
+        JSON.stringify(updatedProfile)
+      );
+
+      console.log('[Visitor Profile] Name updated:', firstName);
+
+      return firstName;
+    }
+
+    return null;
+  }, []);
   const handleSend = async (eOrMsg?: string | React.MouseEvent | React.FormEvent) => {
     if (eOrMsg && typeof eOrMsg === 'object' && 'preventDefault' in eOrMsg) eOrMsg.preventDefault();
     const textToSend = typeof eOrMsg === 'string' ? eOrMsg : message;
     if (!textToSend.trim() || textToSend.length > 2000) return;
+
+    updateVisitorProfileFromMessage(textToSend);
 
     if (!chatClientRef.current) {
       setError('Chat is not configured.');
@@ -1592,6 +1696,12 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     const doSend = (convId: string) => {
       return chatClientRef.current!.sendMessage(textToSend, {
         conversationId: convId || undefined,
+
+        inputs: {
+          visitor_first_name: visitorProfileRef.current.firstName || '',
+          visitor_email: visitorProfileRef.current.email || '',
+          visitor_company: visitorProfileRef.current.company || '',
+        },
 
         onMessage: (accumulatedText: string, _messageId: string, newConversationId: string) => {
           fullText = accumulatedText;
@@ -2211,6 +2321,25 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                               <Mic className={`w-4 h-4 ${isListening ? 'text-white' : ''}`} />
                             </button>
                           </div>
+                          {/* Voice call button */}
+                          <button
+                            type="button"
+                            onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
+                            disabled={voiceCallConnecting || isLoading}
+                            title={voiceCallActive ? "End voice call" : "Start voice call"}
+                            className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              voiceCallActive
+                                ? 'bg-red-500 hover:bg-red-600' 
+                                : 'bg-white/70 hover:bg-white text-[#af71f1] border border-[#af71f1]/30'
+                            }`}
+                          >                           
+                            {voiceCallActive ? (
+                              <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                            ) : (
+                              <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+                            )}
+                          </button>
+
                           {/* Send button */}
                           <button
                             className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
