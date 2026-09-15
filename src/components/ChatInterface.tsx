@@ -3,7 +3,8 @@ import {
   Send, X, Loader2, AlertCircle, Clock, CalendarDays, ChevronRight, Mic, RotateCcw,
   Monitor, Bot, Cog, BarChart3, Search, PenLine, Rocket, Target,
   Lightbulb, Shield, Users, Globe, Zap, Database, Code, Layers,
-  Settings, BrainCircuit, Workflow, Network, Phone, PhoneOff, type LucideIcon,
+  Settings, BrainCircuit, Workflow, Network, Phone, PhoneOff,
+  Sparkles, ArrowUpRight, type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -133,9 +134,18 @@ function deepUnwrap(v: any): any {
   return cur;
 }
 
-function isServiceArray(arr: any[]): arr is ServiceItem[] {
-  return Array.isArray(arr) && arr.length > 0 &&
-    arr.every(i => i && typeof i.id === 'string' && typeof i.title === 'string' && typeof i.description === 'string');
+function isServiceArray(arr: any[]): boolean {
+  return Array.isArray(arr) &&
+    arr.length > 0 &&
+    arr.every(i =>
+      i &&
+      typeof i === 'object' &&
+      (
+        typeof i.title === 'string' ||
+        typeof i.name === 'string' ||
+        typeof i.service_name === 'string'
+      )
+    );
 }
 
 function isTimeSlotArray(arr: any[]): arr is TimeSlot[] {
@@ -211,52 +221,121 @@ function transformCompanyProfileToAbout(data: any): AboutCompanyItem | null {
 }
 
 function isProcessArray(arr: any[]): arr is ProcessItem[] {
-  return Array.isArray(arr) && arr.length > 0 &&
-    arr.every(i => i && (typeof i.step === 'number' || typeof i.step === 'string') && typeof i.title === 'string' && typeof i.description === 'string');
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+
+  return arr.every((item) => {
+    if (!item || typeof item !== 'object') return false;
+
+    const hasStep =
+      typeof item.step === 'number' ||
+      typeof item.step === 'string' ||
+      typeof item.number === 'number' ||
+      typeof item.order === 'number';
+
+    const hasTitle =
+      typeof item.title === 'string' ||
+      typeof item.name === 'string' ||
+      typeof item.heading === 'string';
+
+    const hasDescription =
+      typeof item.description === 'string' ||
+      typeof item.details === 'string' ||
+      typeof item.content === 'string' ||
+      typeof item.text === 'string';
+
+    return hasStep && hasTitle && hasDescription;
+  });
 }
 
-function findInData<T>(data: any, check: (a: any[]) => a is T[], keys: string[]): { items: T[]; extra?: Record<string, any> } | null {
-  if (check(data)) return { items: data };
+function findInData<T>(
+  data: any,
+  check: (a: any[]) => a is T[],
+  keys: string[]
+): { items: T[]; extra?: Record<string, any> } | null {
 
+  // 1. Direct array
   if (Array.isArray(data)) {
-    for (const item of data) {
-      if (item && typeof item === 'object') {
-        for (const k of keys) {
-          if (Array.isArray(item[k])) {
-            const u = deepUnwrap(item[k]);
-            if (check(u)) return { items: u, extra: item };
-          }
-        }
-      }
+    if (check(data)) {
+      return { items: data };
     }
+
+    // Search every item in the array
+    for (const item of data) {
+      const found = findInData<T>(item, check, keys);
+      if (found) return found;
+    }
+
     return null;
   }
 
+  // 2. JSON string
+  if (typeof data === 'string') {
+    const parsed = safeParse(data);
+
+    if (parsed.ok) {
+      return findInData<T>(
+        deepUnwrap(parsed.data),
+        check,
+        keys
+      );
+    }
+
+    return null;
+  }
+
+  // 3. Object
   if (data && typeof data === 'object') {
-    for (const k of keys) {
-      if (Array.isArray(data[k])) {
-        const u = deepUnwrap(data[k]);
-        if (check(u)) return { items: u, extra: data };
+
+    // First check the explicitly expected keys
+    for (const key of keys) {
+      const value = data[key];
+
+      if (value === undefined || value === null) {
+        continue;
+      }
+
+      const found = findInData<T>(
+        value,
+        check,
+        keys
+      );
+
+      if (found) {
+        return {
+          items: found.items,
+          extra: found.extra || data,
+        };
       }
     }
-    if ('result' in data) {
-      const r = deepUnwrap(data.result);
-      const f = findInData(r, check, keys);
-      if (f) return f;
-    }
-    if (data.message?.text) {
-      const inner = deepUnwrap(data.message.text);
-      const f = findInData(inner, check, keys);
-      if (f) return f;
-    }
-    for (const key of Object.keys(data)) {
-      const val = deepUnwrap(data[key]);
-      if (val !== data[key]) {
-        const f = findInData(val, check, keys);
-        if (f) return f;
+
+    // 4. IMPORTANT:
+    // Recursively inspect ALL other object properties.
+    // Xpectrum tool outputs may be wrapped in arbitrary tool names.
+    for (const [key, value] of Object.entries(data)) {
+
+      if (keys.includes(key)) {
+        continue;
+      }
+
+      if (value === undefined || value === null) {
+        continue;
+      }
+
+      const found = findInData<T>(
+        value,
+        check,
+        keys
+      );
+
+      if (found) {
+        return {
+          items: found.items,
+          extra: found.extra || data,
+        };
       }
     }
   }
+
   return null;
 }
 
@@ -305,6 +384,7 @@ function extractCardFromObservation(observation: string): CardWidget | null {
   const parsed = safeParse(observation);
   if (!parsed.ok) return null;
   const data = deepUnwrap(parsed.data);
+  console.log('[ChatCard] Parsed observation data:', data);
 
   const aboutCompany = findAboutCompanyInData(data);
   if (aboutCompany) {
@@ -317,16 +397,281 @@ function extractCardFromObservation(observation: string): CardWidget | null {
     return { template: 'card_widget', type: 'time_slot_grid', payload: { slots: slotResult.items, date: dateVal } };
   }
 
-  const processResult = findInData<ProcessItem>(data, isProcessArray, ['steps', 'company']);
-  if (processResult && processResult.items.length > 0) {
-    return { template: 'card_widget', type: 'process_grid', payload: { steps: processResult.items } };
+   // ── Process flow ────────────────────────────────────────────────
+  // Xpectrum returns:
+  // retrieve_company_process_flow
+  //   -> JSON string
+  //      -> { result: JSON string }
+  //         -> ProcessItem[]
+
+  // ── Process flow ────────────────────────────────────────────────
+// Xpectrum response format:
+// retrieve_company_process_flow
+//   -> double-escaped JSON string
+//      -> { result: JSON string }
+//         -> ProcessItem[]
+
+const processToolOutput = data?.retrieve_company_process_flow;
+
+if (processToolOutput) {
+  console.log('[ChatCard] Process raw value:', processToolOutput);
+  console.log('[ChatCard] Process raw type:', typeof processToolOutput);
+
+  let processData: any = processToolOutput;
+
+  // ------------------------------------------------------------
+  // 1. Parse the process wrapper.
+  //
+  // Xpectrum may return the same tool result twice:
+  // {"result":"[...]"}{"result":"[...]"}
+  //
+  // We only need the first valid JSON object.
+  // ------------------------------------------------------------
+  if (typeof processData === 'string') {
+    try {
+      processData = JSON.parse(processData);
+    } catch {
+      // Handle concatenated JSON objects by parsing the first object.
+      const firstObjectEnd = processData.indexOf('}{"');
+
+      if (firstObjectEnd !== -1) {
+        const firstObject = processData.slice(
+          0,
+          firstObjectEnd + 1
+        );
+
+        try {
+          processData = JSON.parse(firstObject);
+
+          console.warn(
+            '[ChatCard] Duplicate process wrapper detected; using first result'
+          );
+        } catch (err) {
+          console.error(
+            '[ChatCard] Failed to parse first process wrapper:',
+            err
+          );
+          processData = null;
+        }
+      } else {
+        console.error(
+          '[ChatCard] Failed to parse process wrapper:',
+          processData
+        );
+        processData = null;
+      }
+    }
   }
 
-  const serviceResult = findInData<ServiceItem>(data, isServiceArray, ['services']);
+  console.log('[ChatCard] Process parsed wrapper:', processData);
+
+  if (processData) {
+    // ----------------------------------------------------------
+    // 2. Extract result.
+    // ----------------------------------------------------------
+    let processResult = processData?.result;
+
+    console.log(
+      '[ChatCard] Process result before parse:',
+      processResult
+    );
+
+    console.log(
+      '[ChatCard] Process result type:',
+      typeof processResult
+    );
+
+    // ----------------------------------------------------------
+    // 3. Parse inner result array.
+    // ----------------------------------------------------------
+    if (typeof processResult === 'string') {
+      try {
+        processResult = JSON.parse(processResult);
+      } catch (err) {
+        console.error(
+          '[ChatCard] Failed to parse process result:',
+          err
+        );
+        processResult = null;
+      }
+    }
+
+    console.log(
+      '[ChatCard] Process final result:',
+      processResult
+    );
+
+    // ----------------------------------------------------------
+    // 4. Validate and create process card.
+    // ----------------------------------------------------------
+    if (isProcessArray(processResult)) {
+      const steps: ProcessItem[] = processResult.map(
+        (item: any, index: number) => ({
+          step:
+            item.step ??
+            item.number ??
+            item.order ??
+            index + 1,
+
+          title:
+            item.title ??
+            item.name ??
+            item.heading ??
+            `Step ${index + 1}`,
+
+          description:
+            item.description ??
+            item.details ??
+            item.content ??
+            item.text ??
+            '',
+        })
+      );
+
+      console.log(
+        '[ChatCard] Process card detected:',
+        steps
+      );
+
+      return {
+        template: 'card_widget',
+        type: 'process_grid',
+        payload: {
+          steps,
+        },
+        labels: {
+          title: 'How We Work',
+        },
+      };
+    }
+
+    console.warn(
+      '[ChatCard] Process data found but validation failed:',
+      processResult
+    );
+  }
+}
+// ------------------------------------------------------------
+// NORMALIZE NESTED TOOL RESULTS
+// Xpectrum may return:
+// {"result":"[...]"}{"result":"[...]"}
+//
+// Convert nested result arrays into normal data values so
+// service/time-slot/card detection can process them.
+// ------------------------------------------------------------
+for (const key of Object.keys(data || {})) {
+  const value = data[key];
+
+  if (typeof value !== 'string') continue;
+  if (!value.includes('"result"')) continue;
+
+  let wrapper: any = value;
+
+  // Parse the outer {"result": "..."} wrapper.
+  try {
+    wrapper = JSON.parse(value);
+  } catch {
+    // Xpectrum can sometimes return the wrapper twice:
+    // {"result":"[...]"}{"result":"[...]"}
+    const duplicateIndex = value.indexOf('}{"');
+
+    if (duplicateIndex !== -1) {
+      try {
+        wrapper = JSON.parse(
+          value.slice(0, duplicateIndex + 1)
+        );
+
+        console.warn(
+          '[ChatCard] Duplicate tool result wrapper detected:',
+          key
+        );
+      } catch (err) {
+        console.error(
+          '[ChatCard] Failed to parse tool result:',
+          key,
+          err
+        );
+        continue;
+      }
+    } else {
+      continue;
+    }
+  }
+
+  // Extract the inner result.
+  let result = wrapper?.result;
+
+  // Parse the inner JSON array.
+  if (typeof result === 'string') {
+    try {
+      result = JSON.parse(result);
+    } catch (err) {
+      console.error(
+        '[ChatCard] Failed to parse inner tool result:',
+        key,
+        err
+      );
+      continue;
+    }
+  }
+
+  // Replace the nested string with the parsed array.
+  if (Array.isArray(result)) {
+    data[key] = result;
+
+    console.log(
+      '[ChatCard] Normalized tool result:',
+      key,
+      result
+    );
+  }
+}
+  // ------------------------------------------------------------
+  // SERVICE FLOW
+  // ------------------------------------------------------------
+  const serviceResult = findInData<any>(data, isServiceArray,['services', 'service_offerings', 'offerings',  'retrieve_company_services', 'retrieve_services',]);
+
   if (serviceResult && serviceResult.items.length > 0) {
-    return { template: 'card_widget', type: 'service_grid', payload: { services: serviceResult.items } };
-  }
+    const services: ServiceItem[] = serviceResult.items.map((item: any, index: number) => ({id: item.id ?? item.service_id ?? `service-${index + 1}`,
+        title:
+          item.title ??
+          item.name ??
+          item.service_name ??
+          item.heading ??
+          `Service ${index + 1}`,
 
+        description:
+          item.description ??
+          item.details ??
+          item.content ??
+          item.text ??
+          '',
+
+        category:
+          item.category ??
+          item.type ??
+          '',
+
+        icon:
+          item.icon ??
+          item.image ??
+          undefined,
+      })
+    );
+
+    console.log('[ChatCard] Service card detected:',services);
+
+    return {
+      template: 'card_widget',
+      type: 'service_grid',
+      payload: {
+        services,
+      },
+      labels: {
+        title: 'Our Services',
+      },
+    };
+  }
   return null;
 }
 
@@ -339,49 +684,42 @@ function obsToStr(obs: unknown): string {
 }
 
 function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
-  // Structure-based detection: any observation whose value contains an array of bare ISO date
-  // strings (YYYY-MM-DD with no time component) is an availability calendar.
-  // Requires 5+ unique dates to distinguish from time-slot responses (which have datetimes).
+  // First priority: availability calendar.
+  // Requires 5+ unique bare dates to distinguish calendar data
+  // from time-slot responses containing full ISO timestamps.
   for (const t of thoughts) {
     const obs = obsToStr(t.observation);
     if (!obs) continue;
-    // Match bare dates only — \d{4}-\d{2}-\d{2} NOT followed by T or another digit
-    const bareMatches = [...obs.matchAll(/(\d{4}-\d{2}-\d{2})(?![T\d])/g)];
+
+    const bareMatches = [
+      ...obs.matchAll(/(\d{4}-\d{2}-\d{2})(?![T\d])/g),
+    ];
+
     const uniqueDates = [...new Set(bareMatches.map(m => m[1]))];
+
     if (uniqueDates.length >= 5) {
-      return { template: 'card_widget', type: 'availability_calendar', payload: { dates: uniqueDates } };
+      return {
+        template: 'card_widget',
+        type: 'availability_calendar',
+        payload: { dates: uniqueDates },
+      };
     }
   }
+
+  // Process every observation once for all other card types.
   for (const t of thoughts) {
     const obs = obsToStr(t.observation);
-    if (obs && (obs.includes('card_widget') || obs.includes('"template"'))) {
-      const cw = extractCardFromObservation(obs);
-      if (cw) return cw;
+    if (!obs) continue;
+
+    const card = extractCardFromObservation(obs);
+
+    if (card) {
+      return card;
     }
   }
-  for (const t of thoughts) {
-    const obs = obsToStr(t.observation);
-    if (obs) {
-      const parsed = safeParse(obs);
-      if (parsed.ok) {
-        const data = deepUnwrap(parsed.data);
-        const slotResult = findInData<TimeSlot>(data, isTimeSlotArray, ['available_slots', 'slots']);
-        if (slotResult && slotResult.items.length > 0) {
-          return { template: 'card_widget', type: 'time_slot_grid', payload: { slots: slotResult.items, date: slotResult.extra?.date || data?.date } };
-        }
-      }
-    }
-  }
-  for (const t of thoughts) {
-    const obs = obsToStr(t.observation);
-    if (obs) {
-      const cw = extractCardFromObservation(obs);
-      if (cw) return cw;
-    }
-  }
+
   return null;
 }
-
 // ─── About Company Text Detection (non-JSON plain-text responses) ────────
 
 function looksLikeAboutCompany(text: string): boolean {
@@ -758,14 +1096,76 @@ const ServiceCardGrid = ({ services, onSend }: { services: ServiceItem[]; onSend
   </div>
 );
 
-const ProcessCardGrid = ({ steps, onSend }: { steps: ProcessItem[]; onSend: (msg: string) => void }) => (
-  <div className="my-6">
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-7">
-      {steps.map((p, i) => <FlipCard key={i} icon={p.icon || undefined} title={p.title} description={p.description} index={i} onLearnMore={() => onSend(`Tell me more about the ${p.title} step`)} />)}
+const ProcessCardGrid = ({
+  steps,
+  onSend,
+}: {
+  steps: ProcessItem[];
+  onSend: (msg: string) => void;
+}) => (
+  <div className="my-6 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      {steps.map((p, i) => (
+        <motion.div
+          key={`${p.step}-${p.title}-${i}`}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.35,
+            delay: i * 0.07,
+          }}
+          className="group relative overflow-hidden rounded-2xl border border-white/80 bg-white/65 backdrop-blur-xl p-4 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.05)] hover:bg-white/90 hover:border-[#af71f1]/30 hover:shadow-[0_14px_40px_rgba(175,113,241,0.14)] transition-all duration-300 hover:-translate-y-1"
+        >
+          <div className="flex items-start gap-4">
+            
+            {/* Step number */}
+            <div className="relative flex-shrink-0">
+              <div className="w-11 h-11 rounded-xl bg-[#af71f1]/10 flex items-center justify-center text-[#af71f1] font-semibold text-sm group-hover:bg-[#af71f1] group-hover:text-white transition-all duration-300">
+                {p.step}
+              </div>
+
+              {/* Connector */}
+              {i < steps.length - 1 && (
+                <div className="hidden sm:block absolute top-12 left-1/2 w-px h-6 bg-[#af71f1]/10" />
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] sm:text-xs uppercase tracking-[0.14em] text-[#af71f1] font-semibold mb-1">
+                    Step {p.step}
+                  </p>
+
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">
+                    {p.title}
+                  </h3>
+                </div>
+
+                <ArrowUpRight className="w-4 h-4 flex-shrink-0 text-gray-300 group-hover:text-[#af71f1] transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </div>
+
+              <p className="mt-2 text-xs sm:text-sm text-gray-500 leading-relaxed">
+                {p.description}
+              </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onSend(`Tell me more about the ${p.title} step`)
+                }
+                className="mt-4 text-xs sm:text-sm font-semibold text-[#8d55c7] hover:text-[#af71f1] transition-colors"
+              >
+                Explore this step →
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      ))}
     </div>
   </div>
 );
-
 const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; date?: string }; onSend: (msg: string) => void }) => {
   const [selected, setSelected] = useState<number | null>(null);
   const [email, setEmail] = useState(() => localStorage.getItem('hyun-user-email') || '');
@@ -1531,6 +1931,25 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
 
   const endVoiceCall = useCallback(() => {
     xpectrumVoiceRef.current?.disconnect();
+
+     // Preserve completed voice transcript messages in the main chat history
+  setVoiceTranscripts(prev => {
+    const finalSegments = prev.filter(
+      segment => segment.isFinal && segment.text?.trim()
+    );
+
+    if (finalSegments.length > 0) {
+      setChat(chatPrev => [
+        ...chatPrev,
+        ...finalSegments.map(segment => ({
+          role: segment.speaker === 'agent' ? 'bot' : 'user',
+          text: segment.text.trim(),
+        })),
+      ]);
+    }
+
+    return prev;
+  });
     setVoiceCallActive(false);
     setVoiceCallConnecting(false);
     setVoiceTranscripts([]);
@@ -1739,10 +2158,13 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           } else {
             agentThoughts.push(mapped);
           }
-          const card = extractCardFromThoughts(agentThoughts);
-          if (card) {
-            console.log('[ChatDebug] Card extracted from thoughts:', card.type, card.payload);
-            extractedCard = card;
+          if (!extractedCard) {
+            const card = extractCardFromThoughts(agentThoughts);
+          
+            if (card) {
+              console.log('[ChatDebug] Card extracted from thoughts:', card.type, card.payload);
+              extractedCard = card;
+            }
           }
         },
 
@@ -1950,7 +2372,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-white"
+          className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white"
         >
           {/* Injecting CSS for the smooth fade-in streaming chunks */}
           <style>{`
@@ -1969,10 +2391,26 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
 
           <LayoutGroup>
             {/* Background blobs - Desktop (matches landing page hero) */}
+            {/* Background atmosphere - Desktop */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none hidden lg:block">
-              <div className="absolute w-[516px] h-[518px] top-[25%] right-0 bg-[#efe9c0] rounded-[258px/259px] blur-[138px]" />
-              <div className="absolute w-[614px] h-[616px] top-[15%] left-1/4 bg-[#d0a4ff] rounded-[307px/308px] blur-[138px]" />
-              <div className="absolute w-[614px] h-[616px] top-[20%] left-0 bg-[#c0e9ef] rounded-[307px/308px] blur-[138px]" />
+              <motion.div
+                className="absolute w-[560px] h-[560px] top-[22%] -right-20 bg-[#efe9c0] rounded-full blur-[150px] opacity-70"
+                animate={{x: [0, 20, 0],y: [0, -15, 0],}}
+                transition={{duration: 12,repeat: Infinity,ease: "easeInOut",}}
+              />
+
+              <motion.div
+                className="absolute w-[620px] h-[620px] top-[10%] left-[28%] bg-[#d0a4ff] rounded-full blur-[155px] opacity-65"
+                animate={{x: [0, -20, 0],y: [0, 20, 0],}}
+                transition={{duration: 14,repeat: Infinity,ease: "easeInOut",}}
+              />
+
+              <motion.div
+                className="absolute w-[600px] h-[600px] top-[25%] -left-20 bg-[#c0e9ef] rounded-full blur-[150px] opacity-65"
+                animate={{x: [0, 15, 0],y: [0, 15, 0],}}
+                transition={{duration: 16,repeat: Infinity,ease: "easeInOut",}}
+              />
+              <div className="absolute inset-0 bg-white/10" />
             </div>
             {/* Background blobs - Mobile/Tablet (matches landing page hero) */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none lg:hidden">
@@ -1991,106 +2429,194 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                 <polyline points="9 22 9 12 15 12 15 22"/>
               </svg>
             </button>
-
             {showWelcome ? (
-              <div className="flex flex-col items-center justify-center h-full relative z-10 px-4 sm:px-6">
-                <div className="text-center max-w-6xl w-full">
-                  <div className="flex flex-col items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
-                    <motion.img
-                      src={haLogo}
-                      alt="Hyun and Associates Logo"
-                      className="object-contain"
-                      layoutId="ha-logo"
-                      initial={{ scale: 2.8, y: '20vh', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.15))' }}
-                      animate={
-                        introPhase === 'big'
-                          ? { scale: 2.8, y: '20vh', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.15))' }
-                          : { scale: 1, y: 0, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))' }
-                      }
-                      transition={
-                        introPhase === 'shrinking'
-                          ? { type: 'spring', stiffness: 280, damping: 22, mass: 0.9 }
-                          : { duration: 0 }
-                      }
-                      style={{ width: 128, height: 128 }}
-                    />
+            <div className="flex flex-col items-center justify-center min-h-full relative z-10 px-4 sm:px-6 py-20">
+              <div className="text-center max-w-5xl w-full mx-auto">
+                <div className="flex flex-col items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
+                  <motion.img
+                    src={haLogo}
+                    alt="Hyun and Associates Logo"
+                    className="object-contain"
+                    layoutId="ha-logo"
+                    initial={{
+                    scale: 2.8,
+                    y: "20vh",
+                    filter: "drop-shadow(0 12px 32px rgba(0,0,0,0.15))",
+                    }}
+                    animate={introPhase === "big" ? {scale: 2.8, y: "20vh", filter: "drop-shadow(0 12px 32px rgba(0,0,0,0.15))",}: {scale: 1,y: 0,filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.1))",}}
+                    transition={introPhase === "shrinking" ? {type: "spring",stiffness: 280,damping: 22,mass: 0.9,} : { duration: 0 }}
+                    style={{ width: 112, height: 112 }}
+                  />
+                </div>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{opacity: introPhase === "done" ? 1 : 0,y: introPhase === "done" ? 0 : 16,}}
+                transition={{ duration: 0.5 }}
+                style={{pointerEvents: introPhase === "done" ? "auto" : "none",}}
+              >
+              <div className="text-center max-w-4xl mx-auto">
+
+                <div className="inline-flex items-center gap-2 px-3.5 py-2 mb-5 rounded-full bg-[#af71f1]/10 border border-[#af71f1]/20 text-[#8d55c7] text-xs sm:text-sm font-medium">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  AI-powered assistance
+                </div>
+
+                <h1 className="font-normal text-black text-4xl sm:text-5xl md:text-6xl lg:text-7xl text-center tracking-[-0.04em] leading-[1.02] mb-5">
+                  How can we
+                  <span className="block bg-gradient-to-r from-[#171717] via-[#af71f1] to-[#171717] bg-clip-text text-transparent">
+                    help you today?
+                  </span>
+                </h1>
+
+                <p className="max-w-2xl mx-auto text-gray-500 text-base sm:text-lg md:text-xl text-center leading-relaxed mb-8">
+                  Explore our services, understand our capabilities,
+                  <br className="hidden sm:block" />
+                  or start a conversation with our AI assistant.
+                </p>
+
+              </div>
+            <div className="flex flex-col w-full items-center gap-4 sm:gap-6">
+          <form
+            onSubmit={handleSend}
+            className="relative w-full max-w-3xl"
+          >
+            <div className="relative flex items-center bg-white/90 backdrop-blur-sm rounded-full border border-gray-200 shadow-lg">
+
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={
+                  isListening
+                    ? "Listening..."
+                    : "Type your message here..."
+                }
+                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 pr-24 sm:pr-28 bg-transparent text-black text-base sm:text-lg placeholder-gray-400 focus:outline-none rounded-full"
+              />
+
+              <div className="absolute right-2 flex items-center gap-1.5">
+
+                <button
+                  type="button"
+                  onClick={startListening}
+                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
+                    isListening
+                      ? "bg-red-500 hover:bg-red-600 voice-pulse"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]"
+                  }`}
+                >
+                  <Mic
+                    className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                      isListening ? "text-white" : ""
+                    }`}
+                  />
+                </button>
+
+                <button
+                  type="submit"
+                  className="w-9 h-9 sm:w-10 sm:h-10 bg-[#af71f1] rounded-full flex items-center justify-center hover:bg-[#9c5ee0] transition-colors"
+                >
+                  <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </button>
+
+              </div>
+            </div>
+          </form>
+
+         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-3xl mx-auto">
+
+           {[
+              {
+                icon: Layers,
+                title: "Explore Our Services",
+                description: "Discover how our technology solutions can help your business.",
+                prompt: "What services do you offer?",
+              },
+              {
+                icon: BrainCircuit,
+                title: "AI for Your Business",
+                description: "Explore practical ways AI can improve your business.",
+                prompt: "How can AI help my business?",
+              },
+              {
+                icon: CalendarDays,
+                title: "Book a Consultation",
+                description: "Find a convenient time to speak with our team.",
+                prompt: "I would like to book a consultation",
+              },
+              {
+                icon: Workflow,
+                title: "How We Work",
+                description: "Learn about our approach and delivery process.",
+                prompt: "Tell me about your process",
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <button
+                key={item.title}
+                type="button"
+                onClick={() => sendMessage(item.prompt)}
+                className="group text-left p-4 sm:p-5 rounded-2xl border border-white/80 bg-white/60 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.05)] hover:bg-white/85 hover:border-[#af71f1]/30 hover:shadow-[0_14px_40px_rgba(175,113,241,0.14)] transition-all duration-300 hover:-translate-y-1">
+                <div className="flex items-start gap-4">
+
+                  <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-[#af71f1]/10 flex items-center justify-center text-[#af71f1] group-hover:bg-[#af71f1] group-hover:text-white transition-all duration-300">
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <motion.div
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: introPhase === 'done' ? 1 : 0, y: introPhase === 'done' ? 0 : 16 }}
-                    transition={{ duration: 0.5 }}
-                    style={{ pointerEvents: introPhase === 'done' ? 'auto' : 'none' }}
-                  >
-                    <h1 className="font-normal text-black text-2xl sm:text-3xl md:text-5xl lg:text-6xl text-center leading-tight mb-4 sm:mb-6">
-                      Welcome to<br />Hyun & Associates
-                    </h1>
-                    <p className="font-normal text-black text-base sm:text-lg md:text-2xl text-center leading-relaxed mb-6 sm:mb-8 md:mb-12 px-2">
-                      <span className="font-semibold">where we let innovative technologies work for you. </span>
-                      <span className="font-bold italic">How can I help you today?</span>
-                    </p>
-                    <div className="flex flex-col w-full items-center gap-4 sm:gap-6">
-                      <form onSubmit={handleSend} className="relative w-full max-w-3xl">
-                        <div className="relative flex items-center bg-white/90 backdrop-blur-sm rounded-full border border-gray-200 shadow-lg">
-                          <input
-                            type="text" value={message} onChange={(e) => setMessage(e.target.value)}
-                            placeholder={isListening ? "Listening..." : "Type your message here..."}
-                            className="flex-1 px-4 sm:px-6 py-3 sm:py-4 pr-24 sm:pr-28 bg-transparent text-black text-base sm:text-lg placeholder-gray-400 focus:outline-none rounded-full"
-                          />
-                          <div className="absolute right-2 flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={startListening}
-                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
-                                isListening
-                                  ? 'bg-red-500 hover:bg-red-600 voice-pulse'
-                                  : 'bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-[#af71f1]'
-                              }`}
-                            >
-                              <Mic className={`w-4 h-4 sm:w-5 sm:h-5 ${isListening ? 'text-white' : ''}`} />
-                            </button>
-                            <button type="submit" className="w-9 h-9 sm:w-10 sm:h-10 bg-[#af71f1] rounded-full flex items-center justify-center hover:bg-[#9c5ee0] transition-colors">
-                              <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                            </button>
-                          </div>
-                        </div>
-                      </form>
-                      <div className="flex flex-wrap justify-center gap-2 sm:gap-3 px-2">
-                        {[
-                          "What services do you offer?",
-                          "How can AI help my business?",
-                          "Book a consultation",
-                          "Tell me about your process",
-                        ].map((q) => (
-                          <button
-                            key={q}
-                            onClick={() => sendMessage(q)}
-                            className="px-4 py-2 text-sm rounded-full border border-gray-300 bg-white/70 backdrop-blur-sm text-gray-600 hover:border-[#af71f1] hover:text-[#af71f1] hover:bg-white/90 transition-all duration-200 shadow-sm"
-                          >
-                            {q}
-                          </button>
-                        ))}
-                      </div>
+
+                  <div className="flex-1 min-w-0">
+
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
+                        {item.title}
+                      </h3>
+
+                      <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-[#af71f1] transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                     </div>
-                  </motion.div>
+
+                    <p className="mt-1.5 text-xs sm:text-sm text-gray-500 leading-relaxed">
+                      {item.description}
+                    </p>
+
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+
+        </div> 
+        <div className="flex items-center justify-center gap-2 mt-7 text-xs sm:text-sm text-gray-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#af71f1]" />
+            Ask anything, or type your question below
+        </div>
+      </div>
+    </motion.div>
+  </div>
+</div>
+            ) : (
+              <>
+              <div className="relative z-20 flex-shrink-0 px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5">
+                <div className="max-w-[1440px] mx-auto">
+                  <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 rounded-2xl border border-white/70 shadow-[0_6px_24px_rgba(175,113,241,0.10)]">
+                    <AnimatedLogo isWelcome={false} />
+                    <div className="flex items-center gap-2">
+                      {chat.length > 0 && (
+                        <button
+                          onClick={handleReset}
+                          title="Start a new conversation"
+                          className="group flex items-center gap-2 px-3.5 py-2 rounded-full border border-gray-200/70 bg-white/55 backdrop-blur-sm text-xs sm:text-sm text-gray-500 hover:text-[#af71f1] hover:border-[#af71f1]/40 hover:bg-white/80 transition-all duration-200"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 transition-transform duration-300 group-hover:-rotate-45" />
+                          <span>New chat</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="flex flex-col h-full relative z-10">
-                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 pr-14 sm:pr-16">
-                  <AnimatedLogo isWelcome={false} />
-                  {chat.length > 0 && (
-                    <button
-                      onClick={handleReset}
-                      title="Clear chat"
-                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#af71f1] border border-gray-200 hover:border-[#af71f1]/40 rounded-full px-3 py-1.5 transition-all duration-200 hover:bg-[#af71f1]/5"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      New chat
-                    </button>
-                  )}
-                </div>
-
-                <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
+              
+                <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-5 sm:py-7">
                   <div className="max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
                     {(() => {
                       const lastBotIdx = chat.reduce((last, m, i) => m.role === 'bot' ? i : last, -1);
@@ -2133,6 +2659,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                                     <button key={action} onClick={() => sendMessage(prompt)}
                                       className="px-4 py-2 text-xs rounded-full bg-[#af71f1] text-white font-semibold hover:bg-[#9c5ee0] transition-colors shadow-sm">
                                       {label}
+                                      <ArrowUpRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                                     </button>
                                   );
                                 })}
@@ -2142,7 +2669,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                               <div className="flex flex-wrap gap-2 ml-5 mt-8">
                                 {msg.suggestions.map((q, i) => (
                                   <button key={i} onClick={() => sendMessage(q)}
-                                    className="px-3 py-1.5 text-xs rounded-full border border-[#af71f1] text-[#af71f1] hover:bg-[#af71f1] hover:text-white transition-colors">
+                                    className="px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-[#af71f1]/25 bg-white/60 backdrop-blur-sm text-[#8d55c7] hover:bg-[#af71f1] hover:text-white hover:border-[#af71f1] transition-all duration-200 shadow-sm hover:shadow-md">
                                     {q}
                                   </button>
                                 ))}
@@ -2155,7 +2682,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                               <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
                               <div className="rounded-2xl rounded-bl-md px-1 py-1 w-full">
                                 {msg.text ? (
-                                  <div className="text-black text-base leading-relaxed break-words px-3 py-2">
+                                  <div className="text-gray-800 text-[15px] sm:text-base leading-7 break-words px-1 py-1">
                                     <MarkdownText>{msg.text}</MarkdownText>
                                   </div>
                                 ) : null}
@@ -2172,8 +2699,9 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                                     : 'Tell me about your process';
                                   return (
                                     <button key={action} onClick={() => sendMessage(prompt)}
-                                      className="px-4 py-2 text-xs rounded-full bg-[#af71f1] text-white font-semibold hover:bg-[#9c5ee0] transition-colors shadow-sm">
+                                      className="group inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm rounded-xl bg-[#af71f1] text-white font-semibold hover:bg-[#9c5ee0] transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5">
                                       {label}
+                                      <ArrowUpRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                                     </button>
                                   );
                                 })}
@@ -2236,12 +2764,14 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                         className={`flex ${t.speaker !== 'agent' ? 'justify-end' : 'justify-start'}`}
                       >
                         {t.speaker !== 'agent' ? (
-                          <div className={`max-w-[85%] sm:max-w-[70%] bg-white text-black rounded-2xl rounded-br-md px-3 sm:px-4 py-2.5 sm:py-3 shadow-lg border border-gray-200 ${!t.isFinal ? 'opacity-60' : ''}`}>
+                          <div className={`max-w-[85%] sm:max-w-[70%] bg-white/90 backdrop-blur-xl text-black rounded-2xl rounded-br-md px-4 sm:px-5 py-3 sm:py-3.5 shadow-[0_8px_30px_rgba(0,0,0,0.06)] border border-white/80"> ${!t.isFinal ? 'opacity-60' : ''}`}>
                             <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line break-words">{t.text}</p>
                           </div>
                         ) : (
                           <div className={`max-w-[85%] flex items-start gap-3 ${!t.isFinal ? 'opacity-60' : ''}`}>
-                            <div className="w-2 h-2 bg-[#d0a4ff] rounded-full mt-2 flex-shrink-0" />
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#af71f1] to-[#d0a4ff] flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Sparkles className="w-4 h-4 text-white" />
+                            </div>
                             <div className="rounded-2xl rounded-bl-md px-3 py-2">
                               <p className="text-black text-base leading-relaxed break-words">{t.text}</p>
                             </div>
@@ -2256,7 +2786,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                 </div>
 
                 {/* ── Chat Input (always visible) ── */}
-                <div className="border-t border-white/30 px-3 sm:px-6 py-3 sm:py-4">
+                <div className="flex-shrink-0 border-t border-white/40 bg-white/45 backdrop-blur-2xl px-3 sm:px-6 py-3 sm:py-4">
                   {/* Voice call status bar */}
                   <AnimatePresence>
                     {(voiceCallActive || voiceCallConnecting) && (
@@ -2265,47 +2795,42 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="max-w-7xl w-full mx-auto mb-2"
+                        className="max-w-7xl w-full mx-auto mb-3"
                       >
-                        <div className="flex items-center justify-between px-4 py-2 rounded-full border border-white/40"
-                          style={{ background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+                        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl border border-white/60 shadow-sm"
+                          style={{ background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${voiceCallActive ? 'bg-green-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+                          <div className="flex flex-col">
                             <span className="text-xs font-semibold text-[#1a1a2e]">
-                              {voiceCallConnecting ? 'Connecting...' : 'Voice Call Active'}
+                              {voiceCallConnecting ? 'Connecting to assistant...' : 'Voice conversation'}
                             </span>
-                            {agentSpeaking && (
-                              <span className="flex items-center gap-1 text-xs text-[#af71f1] font-medium">
-                                <span className="flex gap-0.5">
-                                  <span className="w-1 h-2.5 bg-[#af71f1] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                  <span className="w-1 h-3 bg-[#af71f1] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                  <span className="w-1 h-2 bg-[#af71f1] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                </span>
-                                Speaking
+                            {!voiceCallConnecting && (
+                              <span className="text-[10px] sm:text-xs text-gray-500">
+                                Connected
                               </span>
                             )}
                           </div>
                           <button
+                            type="button"
                             onClick={endVoiceCall}
-                            className="inline-flex items-center gap-1 px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-full transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
                           >
-                            <PhoneOff className="w-3 h-3" />
-                            End
+                            <PhoneOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            <span>End Call</span>
                           </button>
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
                       <div className="max-w-7xl w-full mx-auto">
-                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                        <div className="flex items-center gap-2 sm:gap-3">
                           <div className="flex-1 relative">
                             <input
                               type="text" placeholder={isListening ? "Listening..." : "Type your message here..."}
                               value={message}
                               onChange={(e) => setMessage(e.target.value.slice(0, 2000))}
                               onKeyDown={handleKeyPress}
-                              className="w-full px-4 sm:px-5 py-3 sm:py-3.5 pr-12 sm:pr-14 bg-white/60 backdrop-blur-sm border border-white/50 rounded-full text-sm sm:text-base placeholder:text-gray-500 text-black focus:outline-none focus:ring-2 focus:ring-[#af71f1]/50 focus:border-[#af71f1]/40"
+                              className="w-full px-4 sm:px-5 py-3.5 sm:py-4 pr-12 sm:pr-14 bg-white/80 backdrop-blur-xl border border-white/80 rounded-2xl text-sm sm:text-base placeholder:text-gray-400 text-black shadow-[0_6px_24px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-[#af71f1]/30 focus:border-[#af71f1]/40 transition-all"
                               disabled={isLoading}
                             />
                             <button
@@ -2327,10 +2852,10 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                             onClick={voiceCallActive ? endVoiceCall : startVoiceCall}
                             disabled={voiceCallConnecting || isLoading}
                             title={voiceCallActive ? "End voice call" : "Start voice call"}
-                            className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            className={`w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center rounded-2xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md hover:-translate-y-0.5 ${
                               voiceCallActive
-                                ? 'bg-red-500 hover:bg-red-600' 
-                                : 'bg-white/70 hover:bg-white text-[#af71f1] border border-[#af71f1]/30'
+                                ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                : 'bg-white/80 hover:bg-white text-[#af71f1] border border-[#af71f1]/25'
                             }`}
                           >                           
                             {voiceCallActive ? (
@@ -2342,7 +2867,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
 
                           {/* Send button */}
                           <button
-                            className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-full hover:bg-[#9c5ee0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-[#af71f1] rounded-2xl hover:bg-[#9c5ee0] shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={handleSend} disabled={isLoading || !message.trim()}
                           >
                             {isLoading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
@@ -2350,7 +2875,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
                         </div>
                       </div>
                 </div>
-              </div>
+              </>
             )}
           </LayoutGroup>
         </motion.div>
@@ -2358,5 +2883,4 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
     </AnimatePresence>
   );
 };
-
 export default ChatInterface;
