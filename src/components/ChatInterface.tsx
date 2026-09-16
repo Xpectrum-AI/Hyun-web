@@ -1169,6 +1169,16 @@ const ProcessCardGrid = ({
 const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; date?: string }; onSend: (msg: string) => void }) => {
   const [selected, setSelected] = useState<number | null>(null);
   const [email, setEmail] = useState(() => localStorage.getItem('hyun-user-email') || '');
+  const [name, setName] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hyun-user-profile');
+      if(saved) {
+        const profile = JSON.parse(saved);
+        return profile.firstName || '';
+      }
+    } catch {}
+    return '';
+  });
   const [emailError, setEmailError] = useState('');
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
@@ -1220,13 +1230,19 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inputs: { date, start_time: startTime, end_time: endTime, user_email_id: email },
+          inputs: { date, start_time: startTime, end_time: endTime, user_email_id: email, visitor_first_name: name,},
           response_mode: 'blocking',
           user: userId,
         }),
       });
-      if (!res.ok) throw new Error('Booking failed');
+      const result = await res.json();
+
+      console.log('[Booking] HTTP status:', res.status);
+      console.log('[Booking] Workflow response:', result);
+
+      if (!res.ok) {throw new Error('Booking failed');}
       setBooked(true);
+
       onSend(`I've booked the ${fmtSlot(slot)} slot on ${dateLabel}. Confirmation will be sent to ${email}`);
     } catch {
       setBookingError('Booking failed. Please try again.');
@@ -1487,26 +1503,93 @@ const AvailabilityCalendarCard = ({
     setLoadingDate(iso);
     try {
       const userId = localStorage.getItem('hyun-user-id') || 'guest';
+
+      console.log('[Booking] Date selected:', iso);
+      console.log('[Booking] User ID:', userId);
+
       const res = await fetch('/workflow-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs: { date: iso }, response_mode: 'blocking', user: userId }),
+        body: JSON.stringify({ inputs: { date: iso }, response_mode: 'blocking', user: userId, }),
       });
+
       const data = await res.json();
+
+      console.log('[Booking] Availability HTTP status:', res.status);
+      console.log('[Booking] Availability response:', JSON.stringify(data, null, 2));
+
+      if (!res.ok) {
+        throw new Error(`Availability request failed: ${res.status}`);
+      }
+
       const outputs = data.data?.outputs ?? data.outputs ?? {};
-      // outputs values may be JSON-encoded arrays — unwrap all candidates
+
+      console.log('[Booking] Availability outputs:', JSON.stringify(outputs, null, 2));
+
       let slots: TimeSlot[] = [];
-      for (const v of Object.values(outputs)) {
-        const candidate = Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return null; } })() : null);
-        if (Array.isArray(candidate) && candidate.length > 0 && candidate[0]?.start) {
+
+      for (const [key, v] of Object.entries(outputs)) {
+        console.log('[Booking] Checking output:', key, v);
+
+        let candidate: any = v;
+
+        if (typeof candidate === 'string') {
+          try {
+            candidate = JSON.parse(candidate);
+          } catch (e) {
+            console.warn('[Booking] Could not parse output:', key, e);
+            continue;
+        }
+      }
+
+      // Direct array
+      if (Array.isArray(candidate) && candidate.length > 0) {
+        if (candidate[0]?.start || candidate[0]?.start_time) {
           slots = candidate as TimeSlot[];
           break;
         }
       }
-      onPushCard({ template: 'card_widget', type: 'time_slot_grid', payload: { slots, date: iso } });
-    } catch { /* silently ignore */ } finally {
-      setLoadingDate(null);
+
+      // Nested object such as { available_slots: [...] }
+      if (candidate && typeof candidate === 'object') {
+        const nestedSlots =
+          candidate.available_slots ??
+          candidate.slots ??
+          candidate.result;
+
+        if (Array.isArray(nestedSlots) && nestedSlots.length > 0) {
+          slots = nestedSlots as TimeSlot[];
+          break;
+        }
+
+        if (typeof nestedSlots === 'string') {
+          try {
+            const parsedNested = JSON.parse(nestedSlots);
+
+            if (Array.isArray(parsedNested) && parsedNested.length > 0) {
+              slots = parsedNested as TimeSlot[];
+              break;
+            }
+          } catch {}
+        }
+      }
     }
+
+    console.log('[Booking] Slots extracted:', slots);
+
+    onPushCard({
+      template: 'card_widget',
+      type: 'time_slot_grid',
+      payload: {
+        slots,
+        date: iso,
+      },
+    });
+  } catch (error) {
+     console.error('[Booking] Date/slot lookup failed:', error);
+  } finally {
+    setLoadingDate(null);
+  }
   };
 
   return (
@@ -2372,7 +2455,7 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white"
+          className="fixed inset-0 z-50 bg-white overflow-y-auto"
         >
           {/* Injecting CSS for the smooth fade-in streaming chunks */}
           <style>{`
@@ -2586,10 +2669,9 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
           })}
 
         </div> 
-        <div className="flex items-center justify-center gap-2 mt-7 text-xs sm:text-sm text-gray-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#af71f1]" />
-            Ask anything, or type your question below
-        </div>
+        <p className="mb-3 text-center text-sm sm:text-base font-medium text-gray-500">
+          Ask anything, or type your question below
+        </p>
       </div>
     </motion.div>
   </div>
