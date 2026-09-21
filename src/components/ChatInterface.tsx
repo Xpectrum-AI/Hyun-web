@@ -1214,23 +1214,27 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
 
   const handleConfirm = async () => {
     if (selected === null) return;
+    if (!name.trim()) {
+      setBookingError('Please enter your name'); return;
+    }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setEmailError('Please enter a valid email address'); return;
     }
     setEmailError(''); setBookingError(''); setBooking(true);
     try {
       const slot = futureSlots[selected];
-      const date = (slot.start || payload.date || '').split('T')[0];
-      const startTime = toHHMM(slot.start || '');
-      const endTime = toHHMM(slot.end || '');
+      const date = payload.date || (slot.start || '').split('T')[0];
+      const startTime = toHHMM(slot.start || slot.start_time || '');
+      const endTime = toHHMM(slot.end || slot.end_time || '');
       const userId = localStorage.getItem('hyun-user-id') || 'guest';
+      localStorage.setItem('hyun-user-profile', JSON.stringify({firstName: name.trim(), email,}));
       localStorage.setItem('hyun-user-email', email);
 
       const res = await fetch('/workflow-book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inputs: { date, start_time: startTime, end_time: endTime, user_email_id: email, visitor_first_name: name,},
+          inputs: { date, start_time: startTime, end_time: endTime, user_email_id: email, visitor_first_name: name.trim(),},
           response_mode: 'blocking',
           user: userId,
         }),
@@ -1294,40 +1298,77 @@ const TimeSlotCardView = ({ payload, onSend }: { payload: { slots: TimeSlot[]; d
         })}
       </div>
 
-      {/* Email input — shown once a slot is selected */}
+            {/* Name and email inputs — shown once a slot is selected */}
       <AnimatePresence>
         {selected !== null && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
             className="mt-4 space-y-3 overflow-hidden"
           >
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Your email address</label>
+            {/* Name */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Your name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setBookingError('');
+                }}
+                placeholder="Enter your name"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+              />
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Email address
+              </label>
               <input
                 type="email"
                 value={email}
-                onChange={e => { setEmail(e.target.value); setEmailError(''); }}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailError('');
+                }}
                 placeholder="you@example.com"
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#af71f1]/40 focus:border-[#af71f1] transition-all"
               />
-              {emailError && <p className="text-xs text-red-500 mt-1">{emailError}</p>}
+              {emailError && (
+                <p className="text-xs text-red-500 mt-1">{emailError}</p>
+              )}
             </div>
+
+            {/* Confirm */}
             <div className="flex items-center gap-3">
               <button
                 onClick={handleConfirm}
-                disabled={booking || !email}
-                className={['rounded-full px-5 py-2 text-sm font-semibold uppercase tracking-wide transition-all flex items-center gap-2',
-                  !booking && email ? 'bg-[#af71f1] text-white hover:bg-[#9c5ee0]' : 'cursor-not-allowed bg-gray-100 text-gray-400'
+                disabled={booking || !email || !name.trim()}
+                className={[
+                  'rounded-full px-5 py-2 text-sm font-semibold uppercase tracking-wide transition-all flex items-center gap-2',
+                  !booking && email && name.trim()
+                    ? 'bg-[#af71f1] text-white hover:bg-[#9c5ee0]'
+                    : 'cursor-not-allowed bg-gray-100 text-gray-400',
                 ].join(' ')}
               >
-                {booking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {booking && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
                 Confirm
               </button>
             </div>
-            {bookingError && <p className="text-xs text-red-500">{bookingError}</p>}
+
+            {bookingError && (
+              <p className="text-xs text-red-500">{bookingError}</p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
-
     </motion.div>
   );
 };
@@ -1506,11 +1547,12 @@ const AvailabilityCalendarCard = ({
 
       console.log('[Booking] Date selected:', iso);
       console.log('[Booking] User ID:', userId);
+      console.log('[Booking] Sending availability request:', { date: iso, timezone: 'America/Los_Angeles',});
 
       const res = await fetch('/workflow-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs: { date: iso }, response_mode: 'blocking', user: userId, }),
+        body: JSON.stringify({ inputs: { date: iso, timezone: 'America/Los_Angeles', }, response_mode: 'blocking', user: userId, }),
       });
 
       const data = await res.json();
@@ -1545,10 +1587,36 @@ const AvailabilityCalendarCard = ({
       // Direct array
       if (Array.isArray(candidate) && candidate.length > 0) {
         if (candidate[0]?.start || candidate[0]?.start_time) {
-          slots = candidate as TimeSlot[];
-          break;
+          const normalizedSlots = candidate.map((slot: any) => ({
+            ...slot,
+            start: slot.start || slot.start_time,
+            end: slot.end || slot.end_time,
+          }));
+
+          const mismatchedSlots = normalizedSlots.filter((slot: any) => {
+            if (!slot.start) return false;
+
+          const slotDate = String(slot.start).split('T')[0];
+          return slotDate !== iso;
+        });
+
+        if (mismatchedSlots.length > 0) {
+          console.warn('[Booking] Workflow returned slots for a different date:', {
+            selectedDate: iso,
+            returnedDates: [...new Set(
+              mismatchedSlots.map((slot: any) => String(slot.start).split('T')[0])
+            )],
+            slots: mismatchedSlots,
+          });
+
+          slots = [];
+        } else {
+          slots = normalizedSlots;
         }
-      }
+
+        break;
+     }
+    }
 
       // Nested object such as { available_slots: [...] }
       if (candidate && typeof candidate === 'object') {
@@ -1575,8 +1643,9 @@ const AvailabilityCalendarCard = ({
       }
     }
 
-    console.log('[Booking] Slots extracted:', slots);
-
+    console.log('[Booking] Slot date verification:', slots.map((slot: any) => ({start: slot.start, start_time: slot.start_time, extractedDate: String(slot.start || slot.start_time || '').split('T')[0], selectedDate: iso,})));
+    console.log('[Booking] Selected calendar date:', iso);
+    console.log('[Booking] Returned slots:', slots);
     onPushCard({
       template: 'card_widget',
       type: 'time_slot_grid',
@@ -1595,11 +1664,11 @@ const AvailabilityCalendarCard = ({
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       className="my-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm w-full"
-      style={{ maxWidth: 580 }}
+      style={{ maxWidth: 580, width: '100%' }}
     >
-      <div className="flex">
+      <div className="flex flex-col sm:flex-row">
         {/* ── Left panel: profile info ── */}
-        <div className="flex flex-col gap-3 px-6 py-6 border-r border-gray-100" style={{ width: 190, flexShrink: 0 }}>
+        <div className="flex flex-col gap-3 px-5 py-5 sm:px-6 sm:py-6 border-b sm:border-b-0 sm:border-r border-gray-100 w-full sm:w-[190px] sm:flex-shrink-0">
           <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-[#e8d5ff]">
             <img src="https://hyunandassociatesllc.com/assets/hyunperson-DiWXyhXY.jpg" alt="Hyun Suh" className="w-full h-full object-cover" />
           </div>
@@ -1624,11 +1693,11 @@ const AvailabilityCalendarCard = ({
           <h3 className="font-semibold text-gray-900 text-sm mb-4">Select a Date</h3>
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-3">
-            <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+            <button onClick={prevMonth} className="mx-auto w-8 h-8 rounded-full text-xs font-medium transition-all flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <span className="text-sm font-semibold text-gray-800">{monthName}</span>
-            <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+            <button onClick={nextMonth} className="mx-auto w-8 h-8 rounded-full text-xs font-medium transition-all flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
             </button>
           </div>
@@ -1639,7 +1708,7 @@ const AvailabilityCalendarCard = ({
             ))}
           </div>
           {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-y-1">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
             {cells.map((day, idx) => {
               if (!day) return <div key={idx} />;
               const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
