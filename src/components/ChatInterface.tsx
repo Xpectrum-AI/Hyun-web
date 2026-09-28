@@ -364,9 +364,12 @@ function findCardWidgetInObject(obj: any): CardWidget | null {
   }
   return null;
 }
-
 function extractCardFromObservation(observation: string): CardWidget | null {
   if (!observation || typeof observation !== 'string') return null;
+
+  const infoGrid = extractInfoGridFromText(observation);
+
+  if (infoGrid) return infoGrid;
 
   if (observation.includes('card_widget') || observation.includes('"template"')) {
     const r = safeParse(observation);
@@ -382,7 +385,12 @@ function extractCardFromObservation(observation: string): CardWidget | null {
   if (profileCard) return profileCard;
 
   const parsed = safeParse(observation);
-  if (!parsed.ok) return null;
+
+  if (!parsed.ok) {
+    // Plain-text observation — no structured card data available.
+    return null;
+  }
+
   const data = deepUnwrap(parsed.data);
   console.log('[ChatCard] Parsed observation data:', data);
 
@@ -672,7 +680,39 @@ for (const key of Object.keys(data || {})) {
       },
     };
   }
-  return null;
+      // ------------------------------------------------------------
+    // STRUCTURED PLAIN-TEXT LIST
+    // Convert numbered Markdown responses into an info card.
+    // Example:
+    // 1. **Data Analysis and Insights**: ...
+    // 2. **Customer Service Improvement**: ...
+    // ------------------------------------------------------------
+    const numberedItems = [...observation.matchAll(
+      /^\s*\d+\.\s+\*\*(.+?)\*\*\s*:\s*(.+?)(?=\n\s*\d+\.\s+\*\*|\s*$)/gms
+    )];
+
+    if (numberedItems.length >= 2) {
+      const items = numberedItems.map((match, index) => ({
+        id: `info-${index + 1}`,
+        title: match[1].trim(),
+        description: match[2].trim(),
+      }));
+
+      console.log('[ChatCard] Info card detected:', items);
+
+      return {
+        template: 'card_widget',
+        type: 'info_grid',
+        payload: {
+          items,
+        },
+        labels: {
+          title: 'AI for Your Business',
+        },
+      };
+    }
+
+    return null;
 }
 
 // Normalize observation to string regardless of whether the API returned a string or object
@@ -682,7 +722,45 @@ function obsToStr(obs: unknown): string {
   if (typeof obs === 'object') return JSON.stringify(obs);
   return String(obs);
 }
+function extractStructuredListCard(text: string): CardWidget | null {
+  if (!text || text.length < 80) return null;
 
+  // Match Markdown numbered items such as:
+  // 1. **Data Analysis**: description
+  // 2. **Customer Service**: description
+  const matches = [
+    ...text.matchAll(
+      /^\s*\d+\.\s+\*\*(.+?)\*\*\s*:?\s*(.*?)(?=\n\s*\d+\.\s+|\s*$)/gms
+    ),
+  ];
+
+  if (matches.length < 3) return null;
+
+  const items = matches
+    .map((match, index) => ({
+      id: `info-${index + 1}`,
+      title: match[1].trim(),
+      description: match[2]
+        .replace(/\s+/g, ' ')
+        .trim(),
+    }))
+    .filter(item => item.title && item.description);
+
+  if (items.length < 3) return null;
+
+  console.log('[ChatCard] Structured info card detected:', items);
+
+  return {
+    template: 'card_widget',
+    type: 'info_grid',
+    payload: {
+      items,
+    },
+    labels: {
+      title: 'AI for Your Business',
+    },
+  };
+}
 function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
   // First priority: availability calendar.
   // Requires 5+ unique bare dates to distinguish calendar data
@@ -717,7 +795,6 @@ function extractCardFromThoughts(thoughts: AgentThought[]): CardWidget | null {
       return card;
     }
   }
-
   return null;
 }
 // ─── About Company Text Detection (non-JSON plain-text responses) ────────
@@ -941,14 +1018,57 @@ function extractCardFromStoredAnswer(content: string): CardWidget | null {
   }
   return null;
 }
+function extractInfoGridFromText(text: string): CardWidget | null {
+  if (!text || typeof text !== 'string') return null;
 
+  // Match numbered items such as:
+  // 1. **Data Analysis and Insights**: AI can...
+  // 2. **Customer Service Improvement**: AI-powered...
+  const matches = [
+    ...text.matchAll(
+      /(?:^|\n)\s*(\d+)\.\s*\*{0,2}([^*\n:]+?)\*{0,2}\s*:\s*([\s\S]*?)(?=\n\s*\d+\.\s|\n\s*(?:Would you like|Do you want)|$)/g
+    ),
+  ];
 
+  if (matches.length < 2) {
+    return null;
+  }
+
+  const items = matches.map((match, index) => ({
+    id: `info-${index + 1}`,
+    title: match[2].trim(),
+    description: match[3]
+      .replace(/\s+/g, ' ')
+      .trim(),
+  }));
+
+  if (items.length < 2) {
+    return null;
+  }
+
+  console.log('[ChatCard] Info grid detected from structured text:', items);
+
+  return {
+    template: 'card_widget',
+    type: 'info_grid',
+    payload: {
+      items,
+    },
+    labels: {
+      title: 'How AI Can Help Your Business',
+    },
+  };
+}
 function extractCardFromContent(content: string): CardWidget | null {
   if (!content || typeof content !== 'string') return null;
 
   // Try company profile extraction first (handles arrays, objects, surrounding text)
   const profileCard = tryParseCompanyProfile(content);
   if (profileCard) return profileCard;
+
+  // Detect structured numbered information in normal AI text
+  const infoCard = extractInfoGridFromText(content);
+  if (infoCard) return infoCard;
 
   // Try JSON-based extraction (card_widget, slots, services, etc.)
   if (content.includes('{')) {
@@ -1159,6 +1279,48 @@ const ProcessCardGrid = ({
               >
                 Explore this step →
               </button>
+            </div>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  </div>
+);
+const InfoCardGrid = ({
+  items,
+}: {
+  items: Array<{
+    id?: string;
+    title: string;
+    description: string;
+  }>;
+}) => (
+  <div className="my-6 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      {items.map((item, i) => (
+        <motion.div
+          key={item.id || `${item.title}-${i}`}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.35,
+            delay: i * 0.07,
+          }}
+          className="group relative overflow-hidden rounded-2xl border border-white/80 bg-white/65 backdrop-blur-xl p-4 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.05)] hover:bg-white/90 hover:border-[#af71f1]/30 hover:shadow-[0_14px_40px_rgba(175,113,241,0.14)] transition-all duration-300 hover:-translate-y-1"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-[#af71f1]/10 flex items-center justify-center text-[#af71f1] font-semibold text-sm group-hover:bg-[#af71f1] group-hover:text-white transition-all duration-300">
+              {i + 1}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm sm:text-base font-semibold text-gray-900">
+                {item.title}
+              </h4>
+
+              <p className="mt-2 text-xs sm:text-sm text-gray-500 leading-relaxed">
+                {item.description}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -1770,6 +1932,22 @@ const RenderCardWidget = memo(({
         </div>
       );
     }
+    case 'info_grid': {
+      const items = payload.items || [];
+
+      if (items.length === 0) return null;
+
+      return (
+        <div>
+          {labels?.title && (
+            <h3 className="font-semibold text-base mb-3 text-gray-900">
+              {labels.title}
+            </h3>
+          )}
+          <InfoCardGrid items={items} />
+        </div>
+      );
+    }
     case 'time_slot_grid':
       return <TimeSlotCardView payload={payload as { slots: TimeSlot[]; date?: string }} onSend={onSend} />;
     case 'about_company':
@@ -1883,8 +2061,8 @@ const ChatInterface = ({ isOpen, onClose, onChatActive }: ChatInterfaceProps) =>
   useEffect(() => {
     // When VITE_CHAT_BASE_URL is empty, use the current origin so requests
     // go through the Netlify Edge Function proxy at /chat-messages.
-    const baseUrl = import.meta.env.VITE_CHAT_BASE_URL || window.location.origin;
-    const apiKey = import.meta.env.VITE_CHAT_API_KEY || 'proxy';
+    const baseUrl = import.meta.env.VITE_XPECTRUM_API_BASE_URL || "https://cloud.xpectrum.dev/v1";
+    const apiKey = import.meta.env.VITE_XPECTRUM_API_KEY;
     chatClientRef.current = new XpectrumChat({
       baseUrl,
       apiKey,
